@@ -6,7 +6,7 @@
 struct nk_context;
 struct nk_rect;
 
-#define FISSION_NK_DOCK_ZONE_COUNT 5
+#define FISSION_NK_DOCK_ZONE_COUNT 9
 
 typedef enum fission_nk_dock_zone {
     FISSION_NK_DOCK_ZONE_NONE = -1,
@@ -14,7 +14,11 @@ typedef enum fission_nk_dock_zone {
     FISSION_NK_DOCK_ZONE_RIGHT = 1,
     FISSION_NK_DOCK_ZONE_TOP = 2,
     FISSION_NK_DOCK_ZONE_BOTTOM = 3,
-    FISSION_NK_DOCK_ZONE_CENTER = 4
+    FISSION_NK_DOCK_ZONE_CENTER = 4,
+    FISSION_NK_DOCK_ZONE_TOP_LEFT = 5,
+    FISSION_NK_DOCK_ZONE_TOP_RIGHT = 6,
+    FISSION_NK_DOCK_ZONE_BOTTOM_LEFT = 7,
+    FISSION_NK_DOCK_ZONE_BOTTOM_RIGHT = 8
 } fission_nk_dock_zone_t;
 
 void fission_nk_apply_theme(struct nk_context *ctx);

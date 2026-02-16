@@ -563,6 +563,30 @@ void fission_nk_build_dock_zones(
         inner_w,
         inner_h
     );
+    out_zones[FISSION_NK_DOCK_ZONE_TOP_LEFT] = nk_rect(
+        bounds->x,
+        bounds->y,
+        edge_x,
+        edge_y
+    );
+    out_zones[FISSION_NK_DOCK_ZONE_TOP_RIGHT] = nk_rect(
+        bounds->x + bounds->w - edge_x,
+        bounds->y,
+        edge_x,
+        edge_y
+    );
+    out_zones[FISSION_NK_DOCK_ZONE_BOTTOM_LEFT] = nk_rect(
+        bounds->x,
+        bounds->y + bounds->h - edge_y,
+        edge_x,
+        edge_y
+    );
+    out_zones[FISSION_NK_DOCK_ZONE_BOTTOM_RIGHT] = nk_rect(
+        bounds->x + bounds->w - edge_x,
+        bounds->y + bounds->h - edge_y,
+        edge_x,
+        edge_y
+    );
 }
 
 static int fission_nk_point_in_rect(
@@ -585,6 +609,18 @@ static int fission_nk_point_in_rect(
 
 static const char *fission_nk_dock_zone_label(fission_nk_dock_zone_t zone)
 {
+    if (zone == FISSION_NK_DOCK_ZONE_TOP_LEFT) {
+        return "TOP LEFT";
+    }
+    if (zone == FISSION_NK_DOCK_ZONE_TOP_RIGHT) {
+        return "TOP RIGHT";
+    }
+    if (zone == FISSION_NK_DOCK_ZONE_BOTTOM_LEFT) {
+        return "BOTTOM LEFT";
+    }
+    if (zone == FISSION_NK_DOCK_ZONE_BOTTOM_RIGHT) {
+        return "BOTTOM RIGHT";
+    }
     if (zone == FISSION_NK_DOCK_ZONE_LEFT) {
         return "LEFT";
     }
@@ -670,6 +706,18 @@ fission_nk_dock_zone_t fission_nk_pick_dock_zone(
         return FISSION_NK_DOCK_ZONE_NONE;
     }
 
+    if (fission_nk_point_in_rect(&zones[FISSION_NK_DOCK_ZONE_TOP_LEFT], x, y) != 0) {
+        return FISSION_NK_DOCK_ZONE_TOP_LEFT;
+    }
+    if (fission_nk_point_in_rect(&zones[FISSION_NK_DOCK_ZONE_TOP_RIGHT], x, y) != 0) {
+        return FISSION_NK_DOCK_ZONE_TOP_RIGHT;
+    }
+    if (fission_nk_point_in_rect(&zones[FISSION_NK_DOCK_ZONE_BOTTOM_LEFT], x, y) != 0) {
+        return FISSION_NK_DOCK_ZONE_BOTTOM_LEFT;
+    }
+    if (fission_nk_point_in_rect(&zones[FISSION_NK_DOCK_ZONE_BOTTOM_RIGHT], x, y) != 0) {
+        return FISSION_NK_DOCK_ZONE_BOTTOM_RIGHT;
+    }
     if (fission_nk_point_in_rect(&zones[FISSION_NK_DOCK_ZONE_LEFT], x, y) != 0) {
         return FISSION_NK_DOCK_ZONE_LEFT;
     }

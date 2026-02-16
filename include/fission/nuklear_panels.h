@@ -25,7 +25,11 @@ typedef enum fission_nk_panel_slot {
     FISSION_NK_PANEL_SLOT_CENTER = 1,
     FISSION_NK_PANEL_SLOT_RIGHT = 2,
     FISSION_NK_PANEL_SLOT_TOP = 3,
-    FISSION_NK_PANEL_SLOT_BOTTOM = 4
+    FISSION_NK_PANEL_SLOT_BOTTOM = 4,
+    FISSION_NK_PANEL_SLOT_TOP_LEFT = 5,
+    FISSION_NK_PANEL_SLOT_TOP_RIGHT = 6,
+    FISSION_NK_PANEL_SLOT_BOTTOM_LEFT = 7,
+    FISSION_NK_PANEL_SLOT_BOTTOM_RIGHT = 8
 } fission_nk_panel_slot_t;
 
 typedef struct fission_nk_panel_bounds {

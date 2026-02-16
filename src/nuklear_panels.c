@@ -251,6 +251,26 @@ static fission_nk_panel_bounds_t fission_nk_panel_default_detached_bounds(
         bounds.y = 520.0f;
         bounds.w = 1020.0f;
         bounds.h = 320.0f;
+    } else if (slot == FISSION_NK_PANEL_SLOT_TOP_LEFT) {
+        bounds.x = 40.0f;
+        bounds.y = 40.0f;
+        bounds.w = 460.0f;
+        bounds.h = 320.0f;
+    } else if (slot == FISSION_NK_PANEL_SLOT_TOP_RIGHT) {
+        bounds.x = 940.0f;
+        bounds.y = 40.0f;
+        bounds.w = 460.0f;
+        bounds.h = 320.0f;
+    } else if (slot == FISSION_NK_PANEL_SLOT_BOTTOM_LEFT) {
+        bounds.x = 40.0f;
+        bounds.y = 520.0f;
+        bounds.w = 460.0f;
+        bounds.h = 320.0f;
+    } else if (slot == FISSION_NK_PANEL_SLOT_BOTTOM_RIGHT) {
+        bounds.x = 940.0f;
+        bounds.y = 520.0f;
+        bounds.w = 460.0f;
+        bounds.h = 320.0f;
     }
 
     return bounds;
@@ -430,6 +450,18 @@ static fission_nk_panel_slot_t fission_nk_panel_slot_from_dock_zone(
     fission_nk_dock_zone_t zone
 )
 {
+    if (zone == FISSION_NK_DOCK_ZONE_TOP_LEFT) {
+        return FISSION_NK_PANEL_SLOT_TOP_LEFT;
+    }
+    if (zone == FISSION_NK_DOCK_ZONE_TOP_RIGHT) {
+        return FISSION_NK_PANEL_SLOT_TOP_RIGHT;
+    }
+    if (zone == FISSION_NK_DOCK_ZONE_BOTTOM_LEFT) {
+        return FISSION_NK_PANEL_SLOT_BOTTOM_LEFT;
+    }
+    if (zone == FISSION_NK_DOCK_ZONE_BOTTOM_RIGHT) {
+        return FISSION_NK_PANEL_SLOT_BOTTOM_RIGHT;
+    }
     if (zone == FISSION_NK_DOCK_ZONE_LEFT) {
         return FISSION_NK_PANEL_SLOT_LEFT;
     }
@@ -449,6 +481,18 @@ static fission_nk_dock_zone_t fission_nk_panel_dock_zone_from_slot(
     fission_nk_panel_slot_t slot
 )
 {
+    if (slot == FISSION_NK_PANEL_SLOT_TOP_LEFT) {
+        return FISSION_NK_DOCK_ZONE_TOP_LEFT;
+    }
+    if (slot == FISSION_NK_PANEL_SLOT_TOP_RIGHT) {
+        return FISSION_NK_DOCK_ZONE_TOP_RIGHT;
+    }
+    if (slot == FISSION_NK_PANEL_SLOT_BOTTOM_LEFT) {
+        return FISSION_NK_DOCK_ZONE_BOTTOM_LEFT;
+    }
+    if (slot == FISSION_NK_PANEL_SLOT_BOTTOM_RIGHT) {
+        return FISSION_NK_DOCK_ZONE_BOTTOM_RIGHT;
+    }
     if (slot == FISSION_NK_PANEL_SLOT_LEFT) {
         return FISSION_NK_DOCK_ZONE_LEFT;
     }
@@ -470,23 +514,40 @@ static int fission_nk_panel_host_resolve_layout(
     int window_height
 )
 {
+    size_t top_left_indices[FISSION_NK_MAX_PANELS];
+    size_t top_indices[FISSION_NK_MAX_PANELS];
+    size_t top_right_indices[FISSION_NK_MAX_PANELS];
     size_t left_indices[FISSION_NK_MAX_PANELS];
     size_t center_indices[FISSION_NK_MAX_PANELS];
     size_t right_indices[FISSION_NK_MAX_PANELS];
-    size_t top_indices[FISSION_NK_MAX_PANELS];
+    size_t bottom_left_indices[FISSION_NK_MAX_PANELS];
     size_t bottom_indices[FISSION_NK_MAX_PANELS];
+    size_t bottom_right_indices[FISSION_NK_MAX_PANELS];
+    size_t top_left_count;
+    size_t top_count;
+    size_t top_right_count;
     size_t left_count;
     size_t center_count;
     size_t right_count;
-    size_t top_count;
+    size_t bottom_left_count;
     size_t bottom_count;
+    size_t bottom_right_count;
     size_t i;
+    int has_top_left;
+    int has_top;
+    int has_top_right;
     int has_left;
     int has_center;
     int has_right;
-    int has_top;
+    int has_bottom_left;
     int has_bottom;
+    int has_bottom_right;
+    int has_top_band;
+    int has_bottom_band;
     int has_mid;
+    int has_left_side;
+    int has_center_side;
+    int has_right_side;
     int vertical_gutters;
     int horizontal_gutters;
     float content_x;
@@ -516,6 +577,8 @@ static int fission_nk_panel_host_resolve_layout(
     float left_x;
     float center_x;
     float right_x;
+    float left_splitter_x;
+    float right_splitter_x;
 
     if (host == NULL) {
         return 0;
@@ -543,11 +606,15 @@ static int fission_nk_panel_host_resolve_layout(
     host->dock_workspace_bounds.w = content_w;
     host->dock_workspace_bounds.h = content_h;
 
+    top_left_count = 0u;
+    top_count = 0u;
+    top_right_count = 0u;
     left_count = 0u;
     center_count = 0u;
     right_count = 0u;
-    top_count = 0u;
+    bottom_left_count = 0u;
     bottom_count = 0u;
+    bottom_right_count = 0u;
 
     for (i = 0u; i < host->count; ++i) {
         fission_nk_panel_entry_t *entry;
@@ -563,36 +630,57 @@ static int fission_nk_panel_host_resolve_layout(
             continue;
         }
 
-        if (entry->state.slot == FISSION_NK_PANEL_SLOT_LEFT) {
+        if (entry->state.slot == FISSION_NK_PANEL_SLOT_TOP_LEFT) {
+            top_left_indices[top_left_count] = i;
+            top_left_count += 1u;
+        } else if (entry->state.slot == FISSION_NK_PANEL_SLOT_TOP) {
+            top_indices[top_count] = i;
+            top_count += 1u;
+        } else if (entry->state.slot == FISSION_NK_PANEL_SLOT_TOP_RIGHT) {
+            top_right_indices[top_right_count] = i;
+            top_right_count += 1u;
+        } else if (entry->state.slot == FISSION_NK_PANEL_SLOT_LEFT) {
             left_indices[left_count] = i;
             left_count += 1u;
         } else if (entry->state.slot == FISSION_NK_PANEL_SLOT_RIGHT) {
             right_indices[right_count] = i;
             right_count += 1u;
-        } else if (entry->state.slot == FISSION_NK_PANEL_SLOT_TOP) {
-            top_indices[top_count] = i;
-            top_count += 1u;
+        } else if (entry->state.slot == FISSION_NK_PANEL_SLOT_BOTTOM_LEFT) {
+            bottom_left_indices[bottom_left_count] = i;
+            bottom_left_count += 1u;
         } else if (entry->state.slot == FISSION_NK_PANEL_SLOT_BOTTOM) {
             bottom_indices[bottom_count] = i;
             bottom_count += 1u;
+        } else if (entry->state.slot == FISSION_NK_PANEL_SLOT_BOTTOM_RIGHT) {
+            bottom_right_indices[bottom_right_count] = i;
+            bottom_right_count += 1u;
         } else {
             center_indices[center_count] = i;
             center_count += 1u;
         }
     }
 
+    has_top_left = (top_left_count > 0u);
+    has_top = (top_count > 0u);
+    has_top_right = (top_right_count > 0u);
     has_left = (left_count > 0u);
     has_center = (center_count > 0u);
     has_right = (right_count > 0u);
-    has_top = (top_count > 0u);
+    has_bottom_left = (bottom_left_count > 0u);
     has_bottom = (bottom_count > 0u);
+    has_bottom_right = (bottom_right_count > 0u);
+    has_top_band = (has_top_left != 0 || has_top != 0 || has_top_right != 0);
+    has_bottom_band = (has_bottom_left != 0 || has_bottom != 0 || has_bottom_right != 0);
     has_mid = (has_left != 0 || has_center != 0 || has_right != 0);
+    has_left_side = (has_top_left != 0 || has_left != 0 || has_bottom_left != 0);
+    has_center_side = (has_top != 0 || has_center != 0 || has_bottom != 0);
+    has_right_side = (has_top_right != 0 || has_right != 0 || has_bottom_right != 0);
 
     horizontal_gutters = 0;
-    if (has_top != 0 && (has_mid != 0 || has_bottom != 0)) {
+    if (has_top_band != 0 && (has_mid != 0 || has_bottom_band != 0)) {
         horizontal_gutters += 1;
     }
-    if (has_mid != 0 && has_bottom != 0) {
+    if (has_mid != 0 && has_bottom_band != 0) {
         horizontal_gutters += 1;
     }
 
@@ -605,17 +693,17 @@ static int fission_nk_panel_host_resolve_layout(
     mid_h = 0.0f;
     bottom_h = 0.0f;
 
-    if (has_top != 0 && has_mid != 0 && has_bottom != 0) {
+    if (has_top_band != 0 && has_mid != 0 && has_bottom_band != 0) {
         top_h = shared_h * host->top_row_ratio;
         bottom_h = shared_h * host->bottom_row_ratio;
         mid_h = shared_h - top_h - bottom_h;
-    } else if (has_top != 0 && has_mid != 0) {
+    } else if (has_top_band != 0 && has_mid != 0) {
         top_h = shared_h * host->top_row_ratio;
         mid_h = shared_h - top_h;
-    } else if (has_mid != 0 && has_bottom != 0) {
+    } else if (has_mid != 0 && has_bottom_band != 0) {
         bottom_h = shared_h * host->bottom_row_ratio;
         mid_h = shared_h - bottom_h;
-    } else if (has_top != 0 && has_bottom != 0) {
+    } else if (has_top_band != 0 && has_bottom_band != 0) {
         float ratio_sum;
 
         ratio_sum = host->top_row_ratio + host->bottom_row_ratio;
@@ -624,17 +712,17 @@ static int fission_nk_panel_host_resolve_layout(
         }
         top_h = shared_h * (host->top_row_ratio / ratio_sum);
         bottom_h = shared_h - top_h;
-    } else if (has_top != 0) {
+    } else if (has_top_band != 0) {
         top_h = shared_h;
     } else if (has_mid != 0) {
         mid_h = shared_h;
-    } else if (has_bottom != 0) {
+    } else if (has_bottom_band != 0) {
         bottom_h = shared_h;
     }
 
-    top_min = (has_top != 0) ? FISSION_NK_PANEL_MIN_TOP_HEIGHT : 0.0f;
+    top_min = (has_top_band != 0) ? FISSION_NK_PANEL_MIN_TOP_HEIGHT : 0.0f;
     mid_min = (has_mid != 0) ? FISSION_NK_PANEL_MIN_HEIGHT : 0.0f;
-    bottom_min = (has_bottom != 0) ? FISSION_NK_PANEL_MIN_BOTTOM_HEIGHT : 0.0f;
+    bottom_min = (has_bottom_band != 0) ? FISSION_NK_PANEL_MIN_BOTTOM_HEIGHT : 0.0f;
 
     if (has_mid != 0 && mid_h < mid_min) {
         deficit = mid_min - mid_h;
@@ -642,26 +730,26 @@ static int fission_nk_panel_host_resolve_layout(
         deficit = fission_nk_panel_take_extent(&bottom_h, bottom_min, deficit);
         mid_h = mid_min - deficit;
     }
-    if (has_top != 0 && top_h < top_min) {
+    if (has_top_band != 0 && top_h < top_min) {
         deficit = top_min - top_h;
         deficit = fission_nk_panel_take_extent(&mid_h, mid_min, deficit);
         deficit = fission_nk_panel_take_extent(&bottom_h, bottom_min, deficit);
         top_h = top_min - deficit;
     }
-    if (has_bottom != 0 && bottom_h < bottom_min) {
+    if (has_bottom_band != 0 && bottom_h < bottom_min) {
         deficit = bottom_min - bottom_h;
         deficit = fission_nk_panel_take_extent(&mid_h, mid_min, deficit);
         deficit = fission_nk_panel_take_extent(&top_h, top_min, deficit);
         bottom_h = bottom_min - deficit;
     }
 
-    if (has_top != 0 && top_h < 1.0f) {
+    if (has_top_band != 0 && top_h < 1.0f) {
         top_h = 1.0f;
     }
     if (has_mid != 0 && mid_h < 1.0f) {
         mid_h = 1.0f;
     }
-    if (has_bottom != 0 && bottom_h < 1.0f) {
+    if (has_bottom_band != 0 && bottom_h < 1.0f) {
         bottom_h = 1.0f;
     }
 
@@ -670,10 +758,10 @@ static int fission_nk_panel_host_resolve_layout(
     mid_y = cursor_y;
     bottom_y = cursor_y;
 
-    if (has_top != 0) {
+    if (has_top_band != 0) {
         top_y = cursor_y;
         cursor_y += top_h;
-        if (has_mid != 0 || has_bottom != 0) {
+        if (has_mid != 0 || has_bottom_band != 0) {
             host->splitter_top_bounds.x = content_x;
             host->splitter_top_bounds.y = cursor_y;
             host->splitter_top_bounds.w = content_w;
@@ -684,7 +772,7 @@ static int fission_nk_panel_host_resolve_layout(
     if (has_mid != 0) {
         mid_y = cursor_y;
         cursor_y += mid_h;
-        if (has_bottom != 0) {
+        if (has_bottom_band != 0) {
             host->splitter_bottom_bounds.x = content_x;
             host->splitter_bottom_bounds.y = cursor_y;
             host->splitter_bottom_bounds.w = content_w;
@@ -692,42 +780,15 @@ static int fission_nk_panel_host_resolve_layout(
             cursor_y += FISSION_NK_PANEL_GAP;
         }
     }
-    if (has_bottom != 0) {
+    if (has_bottom_band != 0) {
         bottom_y = cursor_y;
     }
 
-    if (has_top != 0) {
-        fission_nk_panel_layout_stack_horizontal(
-            host,
-            top_indices,
-            top_count,
-            content_x,
-            top_y,
-            content_w,
-            top_h
-        );
-    }
-    if (has_bottom != 0) {
-        fission_nk_panel_layout_stack_horizontal(
-            host,
-            bottom_indices,
-            bottom_count,
-            content_x,
-            bottom_y,
-            content_w,
-            bottom_h
-        );
-    }
-
-    if (has_mid == 0) {
-        return 1;
-    }
-
     vertical_gutters = 0;
-    if (has_left != 0 && (has_center != 0 || has_right != 0)) {
+    if (has_left_side != 0 && (has_center_side != 0 || has_right_side != 0)) {
         vertical_gutters += 1;
     }
-    if (has_center != 0 && has_right != 0) {
+    if (has_center_side != 0 && has_right_side != 0) {
         vertical_gutters += 1;
     }
 
@@ -740,17 +801,17 @@ static int fission_nk_panel_host_resolve_layout(
     center_w = 0.0f;
     right_w = 0.0f;
 
-    if (has_left != 0 && has_center != 0 && has_right != 0) {
+    if (has_left_side != 0 && has_center_side != 0 && has_right_side != 0) {
         left_w = shared_w * host->left_column_ratio;
         right_w = shared_w * host->right_column_ratio;
         center_w = shared_w - left_w - right_w;
-    } else if (has_left != 0 && has_center != 0) {
+    } else if (has_left_side != 0 && has_center_side != 0) {
         left_w = shared_w * host->left_column_ratio;
         center_w = shared_w - left_w;
-    } else if (has_center != 0 && has_right != 0) {
+    } else if (has_center_side != 0 && has_right_side != 0) {
         right_w = shared_w * host->right_column_ratio;
         center_w = shared_w - right_w;
-    } else if (has_left != 0 && has_right != 0) {
+    } else if (has_left_side != 0 && has_right_side != 0) {
         float ratio_sum;
 
         ratio_sum = host->left_column_ratio + host->right_column_ratio;
@@ -759,44 +820,44 @@ static int fission_nk_panel_host_resolve_layout(
         }
         left_w = shared_w * (host->left_column_ratio / ratio_sum);
         right_w = shared_w - left_w;
-    } else if (has_left != 0) {
+    } else if (has_left_side != 0) {
         left_w = shared_w;
-    } else if (has_center != 0) {
+    } else if (has_center_side != 0) {
         center_w = shared_w;
-    } else if (has_right != 0) {
+    } else if (has_right_side != 0) {
         right_w = shared_w;
     }
 
-    left_min = (has_left != 0) ? FISSION_NK_PANEL_MIN_LEFT_WIDTH : 0.0f;
-    center_min = (has_center != 0) ? FISSION_NK_PANEL_MIN_CENTER_WIDTH : 0.0f;
-    right_min = (has_right != 0) ? FISSION_NK_PANEL_MIN_RIGHT_WIDTH : 0.0f;
+    left_min = (has_left_side != 0) ? FISSION_NK_PANEL_MIN_LEFT_WIDTH : 0.0f;
+    center_min = (has_center_side != 0) ? FISSION_NK_PANEL_MIN_CENTER_WIDTH : 0.0f;
+    right_min = (has_right_side != 0) ? FISSION_NK_PANEL_MIN_RIGHT_WIDTH : 0.0f;
 
-    if (has_center != 0 && center_w < center_min) {
+    if (has_center_side != 0 && center_w < center_min) {
         deficit = center_min - center_w;
         deficit = fission_nk_panel_take_extent(&left_w, left_min, deficit);
         deficit = fission_nk_panel_take_extent(&right_w, right_min, deficit);
         center_w = center_min - deficit;
     }
-    if (has_left != 0 && left_w < left_min) {
+    if (has_left_side != 0 && left_w < left_min) {
         deficit = left_min - left_w;
         deficit = fission_nk_panel_take_extent(&center_w, center_min, deficit);
         deficit = fission_nk_panel_take_extent(&right_w, right_min, deficit);
         left_w = left_min - deficit;
     }
-    if (has_right != 0 && right_w < right_min) {
+    if (has_right_side != 0 && right_w < right_min) {
         deficit = right_min - right_w;
         deficit = fission_nk_panel_take_extent(&center_w, center_min, deficit);
         deficit = fission_nk_panel_take_extent(&left_w, left_min, deficit);
         right_w = right_min - deficit;
     }
 
-    if (has_left != 0 && left_w < 1.0f) {
+    if (has_left_side != 0 && left_w < 1.0f) {
         left_w = 1.0f;
     }
-    if (has_center != 0 && center_w < 1.0f) {
+    if (has_center_side != 0 && center_w < 1.0f) {
         center_w = 1.0f;
     }
-    if (has_right != 0 && right_w < 1.0f) {
+    if (has_right_side != 0 && right_w < 1.0f) {
         right_w = 1.0f;
     }
 
@@ -804,31 +865,115 @@ static int fission_nk_panel_host_resolve_layout(
     left_x = cursor_x;
     center_x = cursor_x;
     right_x = cursor_x;
+    left_splitter_x = 0.0f;
+    right_splitter_x = 0.0f;
 
-    if (has_left != 0) {
+    if (has_left_side != 0) {
         left_x = cursor_x;
         cursor_x += left_w;
-        if (has_center != 0 || has_right != 0) {
-            host->splitter_left_bounds.x = cursor_x;
-            host->splitter_left_bounds.y = mid_y;
-            host->splitter_left_bounds.w = FISSION_NK_PANEL_GAP;
-            host->splitter_left_bounds.h = mid_h;
+        if (has_center_side != 0 || has_right_side != 0) {
+            left_splitter_x = cursor_x;
             cursor_x += FISSION_NK_PANEL_GAP;
         }
     }
-    if (has_center != 0) {
+    if (has_center_side != 0) {
         center_x = cursor_x;
         cursor_x += center_w;
-        if (has_right != 0) {
-            host->splitter_right_bounds.x = cursor_x;
-            host->splitter_right_bounds.y = mid_y;
-            host->splitter_right_bounds.w = FISSION_NK_PANEL_GAP;
-            host->splitter_right_bounds.h = mid_h;
+        if (has_right_side != 0) {
+            right_splitter_x = cursor_x;
             cursor_x += FISSION_NK_PANEL_GAP;
         }
     }
-    if (has_right != 0) {
+    if (has_right_side != 0) {
         right_x = cursor_x;
+    }
+
+    if (has_mid != 0 && has_left_side != 0 && (has_center_side != 0 || has_right_side != 0)) {
+        host->splitter_left_bounds.x = left_splitter_x;
+        host->splitter_left_bounds.y = mid_y;
+        host->splitter_left_bounds.w = FISSION_NK_PANEL_GAP;
+        host->splitter_left_bounds.h = mid_h;
+    }
+    if (has_mid != 0 && has_center_side != 0 && has_right_side != 0) {
+        host->splitter_right_bounds.x = right_splitter_x;
+        host->splitter_right_bounds.y = mid_y;
+        host->splitter_right_bounds.w = FISSION_NK_PANEL_GAP;
+        host->splitter_right_bounds.h = mid_h;
+    }
+
+    if (has_top_band != 0) {
+        if (has_top_left != 0) {
+            fission_nk_panel_layout_stack_vertical(
+                host,
+                top_left_indices,
+                top_left_count,
+                left_x,
+                top_y,
+                left_w,
+                top_h
+            );
+        }
+        if (has_top != 0) {
+            fission_nk_panel_layout_stack_horizontal(
+                host,
+                top_indices,
+                top_count,
+                center_x,
+                top_y,
+                center_w,
+                top_h
+            );
+        }
+        if (has_top_right != 0) {
+            fission_nk_panel_layout_stack_vertical(
+                host,
+                top_right_indices,
+                top_right_count,
+                right_x,
+                top_y,
+                right_w,
+                top_h
+            );
+        }
+    }
+    if (has_bottom_band != 0) {
+        if (has_bottom_left != 0) {
+            fission_nk_panel_layout_stack_vertical(
+                host,
+                bottom_left_indices,
+                bottom_left_count,
+                left_x,
+                bottom_y,
+                left_w,
+                bottom_h
+            );
+        }
+        if (has_bottom != 0) {
+            fission_nk_panel_layout_stack_horizontal(
+                host,
+                bottom_indices,
+                bottom_count,
+                center_x,
+                bottom_y,
+                center_w,
+                bottom_h
+            );
+        }
+        if (has_bottom_right != 0) {
+            fission_nk_panel_layout_stack_vertical(
+                host,
+                bottom_right_indices,
+                bottom_right_count,
+                right_x,
+                bottom_y,
+                right_w,
+                bottom_h
+            );
+        }
+    }
+
+    if (has_mid == 0) {
+        return 1;
     }
 
     if (has_left != 0) {
@@ -1735,7 +1880,11 @@ fission_nk_panel_status_t fission_nk_panel_workspace_register(
         panel->default_slot == FISSION_NK_PANEL_SLOT_LEFT ||
         panel->default_slot == FISSION_NK_PANEL_SLOT_RIGHT ||
         panel->default_slot == FISSION_NK_PANEL_SLOT_TOP ||
-        panel->default_slot == FISSION_NK_PANEL_SLOT_BOTTOM
+        panel->default_slot == FISSION_NK_PANEL_SLOT_BOTTOM ||
+        panel->default_slot == FISSION_NK_PANEL_SLOT_TOP_LEFT ||
+        panel->default_slot == FISSION_NK_PANEL_SLOT_TOP_RIGHT ||
+        panel->default_slot == FISSION_NK_PANEL_SLOT_BOTTOM_LEFT ||
+        panel->default_slot == FISSION_NK_PANEL_SLOT_BOTTOM_RIGHT
     ) {
         entry->state.slot = panel->default_slot;
     } else {
@@ -2148,7 +2297,11 @@ fission_nk_panel_status_t fission_nk_panel_workspace_set_panel_slot_at(
         slot != FISSION_NK_PANEL_SLOT_CENTER &&
         slot != FISSION_NK_PANEL_SLOT_RIGHT &&
         slot != FISSION_NK_PANEL_SLOT_TOP &&
-        slot != FISSION_NK_PANEL_SLOT_BOTTOM
+        slot != FISSION_NK_PANEL_SLOT_BOTTOM &&
+        slot != FISSION_NK_PANEL_SLOT_TOP_LEFT &&
+        slot != FISSION_NK_PANEL_SLOT_TOP_RIGHT &&
+        slot != FISSION_NK_PANEL_SLOT_BOTTOM_LEFT &&
+        slot != FISSION_NK_PANEL_SLOT_BOTTOM_RIGHT
     ) {
         return FISSION_NK_PANEL_STATUS_INVALID_ARGUMENT;
     }
