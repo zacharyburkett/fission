@@ -1,6 +1,7 @@
 #include "fission/nuklear_ui.h"
 
 #include <stdio.h>
+#include <string.h>
 
 #include "fission/nuklear.h"
 
@@ -582,6 +583,83 @@ static int fission_nk_point_in_rect(
     );
 }
 
+static const char *fission_nk_dock_zone_label(fission_nk_dock_zone_t zone)
+{
+    if (zone == FISSION_NK_DOCK_ZONE_LEFT) {
+        return "LEFT";
+    }
+    if (zone == FISSION_NK_DOCK_ZONE_RIGHT) {
+        return "RIGHT";
+    }
+    if (zone == FISSION_NK_DOCK_ZONE_TOP) {
+        return "TOP";
+    }
+    if (zone == FISSION_NK_DOCK_ZONE_BOTTOM) {
+        return "BOTTOM";
+    }
+    if (zone == FISSION_NK_DOCK_ZONE_CENTER) {
+        return "CENTER";
+    }
+    return "";
+}
+
+typedef struct fission_nk_overlay_style_guard {
+    int pushed_background;
+    int pushed_border;
+    int pushed_padding;
+} fission_nk_overlay_style_guard_t;
+
+static void fission_nk_overlay_style_begin(
+    struct nk_context *ctx,
+    fission_nk_overlay_style_guard_t *guard
+)
+{
+    if (guard != NULL) {
+        guard->pushed_background = 0;
+        guard->pushed_border = 0;
+        guard->pushed_padding = 0;
+    }
+    if (ctx == NULL || guard == NULL) {
+        return;
+    }
+
+    guard->pushed_background = nk_style_push_style_item(
+        ctx,
+        &ctx->style.window.fixed_background,
+        nk_style_item_color(nk_rgba(0, 0, 0, 0))
+    );
+    guard->pushed_border = nk_style_push_float(
+        ctx,
+        &ctx->style.window.border,
+        0.0f
+    );
+    guard->pushed_padding = nk_style_push_vec2(
+        ctx,
+        &ctx->style.window.padding,
+        nk_vec2(0.0f, 0.0f)
+    );
+}
+
+static void fission_nk_overlay_style_end(
+    struct nk_context *ctx,
+    const fission_nk_overlay_style_guard_t *guard
+)
+{
+    if (ctx == NULL || guard == NULL) {
+        return;
+    }
+
+    if (guard->pushed_padding != 0) {
+        (void)nk_style_pop_vec2(ctx);
+    }
+    if (guard->pushed_border != 0) {
+        (void)nk_style_pop_float(ctx);
+    }
+    if (guard->pushed_background != 0) {
+        (void)nk_style_pop_style_item(ctx);
+    }
+}
+
 fission_nk_dock_zone_t fission_nk_pick_dock_zone(
     const struct nk_rect *zones,
     float x,
@@ -622,6 +700,8 @@ void fission_nk_draw_dock_zones_overlay(
     struct nk_command_buffer *canvas;
     nk_flags flags;
     size_t i;
+    struct nk_color bounds_border;
+    fission_nk_overlay_style_guard_t style_guard;
 
     if (ctx == NULL || name == NULL || bounds == NULL || zones == NULL) {
         return;
@@ -630,22 +710,34 @@ void fission_nk_draw_dock_zones_overlay(
         return;
     }
 
-    flags = NK_WINDOW_NO_SCROLLBAR | NK_WINDOW_NO_INPUT | NK_WINDOW_BACKGROUND;
+    fission_nk_overlay_style_begin(ctx, &style_guard);
+    flags = NK_WINDOW_NO_SCROLLBAR | NK_WINDOW_NO_INPUT;
     if (!nk_begin(ctx, name, *bounds, flags)) {
         nk_end(ctx);
+        fission_nk_overlay_style_end(ctx, &style_guard);
         return;
     }
 
     canvas = nk_window_get_canvas(ctx);
     if (canvas == NULL) {
         nk_end(ctx);
+        fission_nk_overlay_style_end(ctx, &style_guard);
         return;
     }
+
+    nk_fill_rect(canvas, *bounds, 9.0f, nk_rgba(10, 14, 22, 64));
+    bounds_border = nk_rgba(124, 146, 184, 152);
+    nk_stroke_rect(canvas, *bounds, 9.0f, 1.0f, bounds_border);
 
     for (i = 0u; i < (size_t)FISSION_NK_DOCK_ZONE_COUNT; ++i) {
         struct nk_color fill;
         struct nk_color border;
+        struct nk_color text_color;
         int active;
+        const char *label;
+        int label_len;
+        float label_width;
+        struct nk_rect label_bounds;
 
         if (zones[i].w <= 0.0f || zones[i].h <= 0.0f) {
             continue;
@@ -653,16 +745,47 @@ void fission_nk_draw_dock_zones_overlay(
 
         active = ((int)i == (int)hovered_zone);
         if (active != 0) {
-            fill = nk_rgba(90, 124, 176, 132);
-            border = nk_rgba(208, 226, 255, 212);
+            fill = nk_rgba(106, 150, 214, 182);
+            border = nk_rgba(236, 245, 255, 238);
+            text_color = nk_rgba(248, 252, 255, 255);
         } else {
-            fill = nk_rgba(60, 76, 104, 92);
-            border = nk_rgba(140, 162, 198, 138);
+            fill = nk_rgba(56, 72, 102, 124);
+            border = nk_rgba(170, 192, 228, 168);
+            text_color = nk_rgba(218, 230, 250, 214);
         }
 
         nk_fill_rect(canvas, zones[i], 7.0f, fill);
-        nk_stroke_rect(canvas, zones[i], 7.0f, 1.0f, border);
+        nk_stroke_rect(canvas, zones[i], 7.0f, (active != 0) ? 2.0f : 1.0f, border);
+
+        label = fission_nk_dock_zone_label((fission_nk_dock_zone_t)i);
+        if (label[0] == '\0' || ctx->style.font == NULL || ctx->style.font->width == NULL) {
+            continue;
+        }
+
+        label_len = (int)strlen(label);
+        label_width = ctx->style.font->width(
+            ctx->style.font->userdata,
+            ctx->style.font->height,
+            label,
+            label_len
+        );
+        label_bounds = nk_rect(
+            zones[i].x + (zones[i].w - label_width) * 0.5f - 4.0f,
+            zones[i].y + (zones[i].h - ctx->style.font->height) * 0.5f - 2.0f,
+            label_width + 8.0f,
+            ctx->style.font->height + 4.0f
+        );
+        nk_draw_text(
+            canvas,
+            label_bounds,
+            label,
+            label_len,
+            ctx->style.font,
+            nk_rgba(0, 0, 0, 0),
+            text_color
+        );
     }
 
     nk_end(ctx);
+    fission_nk_overlay_style_end(ctx, &style_guard);
 }

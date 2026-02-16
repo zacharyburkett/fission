@@ -51,6 +51,63 @@ static void fission_nk_panel_overlay_id(
     );
 }
 
+typedef struct fission_nk_overlay_style_guard {
+    int pushed_background;
+    int pushed_border;
+    int pushed_padding;
+} fission_nk_overlay_style_guard_t;
+
+static void fission_nk_panel_overlay_style_begin(
+    struct nk_context *ctx,
+    fission_nk_overlay_style_guard_t *guard
+)
+{
+    if (guard != NULL) {
+        guard->pushed_background = 0;
+        guard->pushed_border = 0;
+        guard->pushed_padding = 0;
+    }
+    if (ctx == NULL || guard == NULL) {
+        return;
+    }
+
+    guard->pushed_background = nk_style_push_style_item(
+        ctx,
+        &ctx->style.window.fixed_background,
+        nk_style_item_color(nk_rgba(0, 0, 0, 0))
+    );
+    guard->pushed_border = nk_style_push_float(
+        ctx,
+        &ctx->style.window.border,
+        0.0f
+    );
+    guard->pushed_padding = nk_style_push_vec2(
+        ctx,
+        &ctx->style.window.padding,
+        nk_vec2(0.0f, 0.0f)
+    );
+}
+
+static void fission_nk_panel_overlay_style_end(
+    struct nk_context *ctx,
+    const fission_nk_overlay_style_guard_t *guard
+)
+{
+    if (ctx == NULL || guard == NULL) {
+        return;
+    }
+
+    if (guard->pushed_padding != 0) {
+        (void)nk_style_pop_vec2(ctx);
+    }
+    if (guard->pushed_border != 0) {
+        (void)nk_style_pop_float(ctx);
+    }
+    if (guard->pushed_background != 0) {
+        (void)nk_style_pop_style_item(ctx);
+    }
+}
+
 static float fission_nk_panel_clamp_float(float value, float min_value, float max_value)
 {
     if (value < min_value) {
@@ -1190,6 +1247,120 @@ static int fission_nk_panel_host_update_panel_drag(
     return 0;
 }
 
+static void fission_nk_panel_host_draw_drag_preview(
+    const fission_nk_panel_workspace_t *host,
+    struct nk_context *ctx
+)
+{
+    const fission_nk_panel_entry_t *entry;
+    struct nk_rect overlay_bounds;
+    struct nk_rect preview_bounds;
+    struct nk_rect title_bounds;
+    struct nk_rect label_bounds;
+    struct nk_command_buffer *canvas;
+    const char *title;
+    int title_len;
+    char overlay_id[96];
+    fission_nk_overlay_style_guard_t style_guard;
+
+    if (
+        host == NULL ||
+        ctx == NULL ||
+        host->dragging_panel == 0 ||
+        host->dragging_has_moved == 0 ||
+        host->dragging_panel_index >= host->count
+    ) {
+        return;
+    }
+
+    entry = &host->entries[host->dragging_panel_index];
+    if (entry->state.visible == 0) {
+        return;
+    }
+
+    preview_bounds = fission_nk_panel_bounds_to_nk_rect(&entry->state.resolved_bounds);
+    preview_bounds.x += (ctx->input.mouse.pos.x - host->dragging_start_x);
+    preview_bounds.y += (ctx->input.mouse.pos.y - host->dragging_start_y);
+    if (preview_bounds.w <= 0.0f || preview_bounds.h <= 0.0f) {
+        return;
+    }
+
+    overlay_bounds = fission_nk_panel_bounds_to_nk_rect(&host->dock_workspace_bounds);
+    overlay_bounds.x -= 40.0f;
+    overlay_bounds.y -= 40.0f;
+    overlay_bounds.w += 80.0f;
+    overlay_bounds.h += 80.0f;
+    if (overlay_bounds.w <= 0.0f || overlay_bounds.h <= 0.0f) {
+        return;
+    }
+
+    fission_nk_panel_overlay_id(overlay_id, sizeof(overlay_id), host, "drag_preview");
+    fission_nk_panel_overlay_style_begin(ctx, &style_guard);
+    if (
+        !nk_begin(
+            ctx,
+            overlay_id,
+            overlay_bounds,
+            NK_WINDOW_NO_SCROLLBAR | NK_WINDOW_NO_INPUT
+        )
+    ) {
+        nk_end(ctx);
+        fission_nk_panel_overlay_style_end(ctx, &style_guard);
+        return;
+    }
+
+    canvas = nk_window_get_canvas(ctx);
+    if (canvas != NULL) {
+        nk_fill_rect(canvas, preview_bounds, 8.0f, nk_rgba(78, 104, 146, 88));
+        nk_stroke_rect(canvas, preview_bounds, 8.0f, 2.0f, nk_rgba(225, 239, 255, 235));
+
+        title_bounds = preview_bounds;
+        title_bounds.h = FISSION_NK_PANEL_TITLE_BAR_HEIGHT;
+        if (title_bounds.h > preview_bounds.h) {
+            title_bounds.h = preview_bounds.h;
+        }
+        nk_fill_rect(canvas, title_bounds, 8.0f, nk_rgba(106, 140, 191, 160));
+
+        if (title_bounds.h < preview_bounds.h) {
+            nk_stroke_line(
+                canvas,
+                preview_bounds.x + 1.0f,
+                title_bounds.y + title_bounds.h,
+                preview_bounds.x + preview_bounds.w - 1.0f,
+                title_bounds.y + title_bounds.h,
+                1.0f,
+                nk_rgba(226, 240, 255, 212)
+            );
+        }
+
+        title = entry->desc.title;
+        if (title == NULL || title[0] == '\0') {
+            title = entry->desc.id;
+        }
+        if (title != NULL && title[0] != '\0' && ctx->style.font != NULL) {
+            title_len = (int)strlen(title);
+            label_bounds = nk_rect(
+                title_bounds.x + 10.0f,
+                title_bounds.y + (title_bounds.h - ctx->style.font->height) * 0.5f - 1.0f,
+                title_bounds.w - 20.0f,
+                ctx->style.font->height + 3.0f
+            );
+            nk_draw_text(
+                canvas,
+                label_bounds,
+                title,
+                title_len,
+                ctx->style.font,
+                nk_rgba(0, 0, 0, 0),
+                nk_rgba(245, 251, 255, 255)
+            );
+        }
+    }
+
+    nk_end(ctx);
+    fission_nk_panel_overlay_style_end(ctx, &style_guard);
+}
+
 static void fission_nk_panel_host_draw_drag_overlay(
     const fission_nk_panel_workspace_t *host,
     struct nk_context *ctx
@@ -1233,6 +1404,7 @@ static void fission_nk_panel_host_draw_drag_overlay(
         zones,
         zone
     );
+    fission_nk_panel_host_draw_drag_preview(host, ctx);
 }
 
 static struct nk_rect fission_nk_panel_window_hover_bounds(
@@ -2422,6 +2594,12 @@ void fission_nk_panel_workspace_draw_menu_bar(
     float panels_menu_width;
     float title_width;
     float right_space;
+    float spacer_width;
+    float available_space;
+    float shortcut_width;
+    float shortcut_column_width;
+    float content_width;
+    float row_spacing;
 
     if (ctx == NULL || host == NULL || window_width <= 0) {
         return;
@@ -2478,6 +2656,31 @@ void fission_nk_panel_workspace_draw_menu_bar(
         );
     }
 
+    shortcut_width = 0.0f;
+    if (
+        shortcut_label[0] != '\0' &&
+        ctx->style.font != NULL &&
+        ctx->style.font->width != NULL
+    ) {
+        shortcut_width = ctx->style.font->width(
+            ctx->style.font->userdata,
+            ctx->style.font->height,
+            shortcut_label,
+            (int)strlen(shortcut_label)
+        );
+    }
+
+    shortcut_column_width = shortcut_width;
+    if (shortcut_column_width > 0.0f) {
+        shortcut_column_width += 36.0f;
+    } else if (shortcut_label[0] != '\0') {
+        shortcut_column_width = 220.0f;
+    }
+
+    if (title_width < 0.0f) {
+        title_width = 0.0f;
+    }
+
     bounds = nk_rect(0.0f, 0.0f, (float)window_width, bar_height);
     flags = NK_WINDOW_BORDER | NK_WINDOW_NO_SCROLLBAR | NK_WINDOW_BACKGROUND;
     if (!nk_begin(ctx, window_id, bounds, flags)) {
@@ -2485,8 +2688,35 @@ void fission_nk_panel_workspace_draw_menu_bar(
         return;
     }
 
+    content_width = nk_window_get_content_region_size(ctx).x;
+    if (content_width <= 0.0f) {
+        content_width = (float)window_width;
+    }
+    row_spacing = ctx->style.window.spacing.x * 4.0f;
+    available_space = content_width - window_menu_width - panels_menu_width - row_spacing;
+    if (available_space < 0.0f) {
+        available_space = 0.0f;
+    }
+    if (shortcut_column_width > available_space) {
+        shortcut_column_width = available_space;
+    }
+    if (title_width > available_space) {
+        title_width = available_space;
+    }
+    if ((title_width + shortcut_column_width) > available_space) {
+        title_width = available_space - shortcut_column_width;
+        if (title_width < 0.0f) {
+            title_width = 0.0f;
+        }
+    }
+    right_space = available_space - title_width - shortcut_column_width;
+    if (right_space < 0.0f) {
+        right_space = 0.0f;
+    }
+    spacer_width = right_space;
+
     nk_menubar_begin(ctx);
-    nk_layout_row_begin(ctx, NK_STATIC, 24.0f, 4);
+    nk_layout_row_begin(ctx, NK_STATIC, 24.0f, 5);
     nk_layout_row_push(ctx, window_menu_width);
     fission_nk_panel_workspace_draw_window_menu(
         ctx,
@@ -2509,12 +2739,10 @@ void fission_nk_panel_workspace_draw_menu_bar(
     nk_layout_row_push(ctx, title_width);
     nk_label(ctx, title_label, NK_TEXT_LEFT);
 
-    right_space = (float)window_width -
-        (window_menu_width + panels_menu_width + title_width + 30.0f);
-    if (right_space < 80.0f) {
-        right_space = 80.0f;
-    }
-    nk_layout_row_push(ctx, right_space);
+    nk_layout_row_push(ctx, spacer_width);
+    nk_label(ctx, "", NK_TEXT_LEFT);
+
+    nk_layout_row_push(ctx, shortcut_column_width);
     nk_label(ctx, shortcut_label, NK_TEXT_RIGHT);
 
     nk_layout_row_end(ctx);
