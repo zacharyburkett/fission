@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 3.20)
 project(fission VERSION 0.1.0 LANGUAGES C)
 
 include(GNUInstallDirs)
+find_package(OpenGL QUIET)
 
 option(
     FISSION_NUKLEAR_AUTO_FETCH
@@ -67,8 +68,36 @@ else()
     target_compile_options(fission PRIVATE -Wall -Wextra -Wpedantic -Werror)
 endif()
 
+set(FISSION_EXPORT_TARGETS fission)
+
+if(OpenGL_FOUND)
+    add_library(fission_nuklear_render src/nuklear_render.c)
+    add_library(fission::nuklear_render ALIAS fission_nuklear_render)
+
+    target_compile_features(fission_nuklear_render PUBLIC c_std_11)
+    target_include_directories(
+        fission_nuklear_render
+        PRIVATE
+            ${FISSION_NUKLEAR_INCLUDE_DIR}
+    )
+    target_link_libraries(
+        fission_nuklear_render
+        PUBLIC
+            fission
+            OpenGL::GL
+    )
+
+    if(MSVC)
+        target_compile_options(fission_nuklear_render PRIVATE /W4 /WX)
+    else()
+        target_compile_options(fission_nuklear_render PRIVATE -Wall -Wextra -Wpedantic -Werror)
+    endif()
+
+    list(APPEND FISSION_EXPORT_TARGETS fission_nuklear_render)
+endif()
+
 install(
-    TARGETS fission
+    TARGETS ${FISSION_EXPORT_TARGETS}
     EXPORT fissionTargets
     ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}

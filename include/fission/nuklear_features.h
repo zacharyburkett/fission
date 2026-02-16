@@ -1,6 +1,10 @@
 #ifndef FISSION_NUKLEAR_FEATURES_H
 #define FISSION_NUKLEAR_FEATURES_H
 
+/*
+ * Shared Nuklear feature surface for all engine/tool apps.
+ * Include this before including <nuklear.h>.
+ */
 #define NK_INCLUDE_FIXED_TYPES
 #define NK_INCLUDE_STANDARD_IO
 #define NK_INCLUDE_STANDARD_VARARGS

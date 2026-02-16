@@ -2,7 +2,7 @@
 
 #include <stdio.h>
 
-#include "nuklear_features.h"
+#include "fission/nuklear_features.h"
 #include "nuklear.h"
 
 static float fission_nk_min_float(float a, float b)
