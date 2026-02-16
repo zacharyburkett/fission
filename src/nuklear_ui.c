@@ -256,3 +256,245 @@ void fission_nk_draw_splitter_overlay(
 
     nk_end(ctx);
 }
+
+int fission_nk_update_splitter_interaction(
+    struct nk_context *ctx,
+    const struct nk_rect *rect,
+    int vertical,
+    int splitter_id,
+    int *active_splitter_id,
+    int *hovered_splitter_id,
+    float *out_delta
+)
+{
+    int hovered;
+
+    if (
+        ctx == NULL ||
+        rect == NULL ||
+        active_splitter_id == NULL ||
+        rect->w <= 0.0f ||
+        rect->h <= 0.0f
+    ) {
+        return 0;
+    }
+
+    if (out_delta != NULL) {
+        *out_delta = 0.0f;
+    }
+
+    hovered = nk_input_is_mouse_hovering_rect(&ctx->input, *rect);
+    if (
+        hovered != 0 &&
+        hovered_splitter_id != NULL &&
+        (*active_splitter_id == 0 || *active_splitter_id == splitter_id)
+    ) {
+        *hovered_splitter_id = splitter_id;
+    }
+
+    if (*active_splitter_id == splitter_id) {
+        if (nk_input_is_mouse_down(&ctx->input, NK_BUTTON_LEFT)) {
+            if (out_delta != NULL) {
+                *out_delta = (vertical != 0) ? ctx->input.mouse.delta.x : ctx->input.mouse.delta.y;
+            }
+            return 1;
+        }
+
+        *active_splitter_id = 0;
+        return 0;
+    }
+
+    if (
+        hovered != 0 &&
+        nk_input_is_mouse_pressed(&ctx->input, NK_BUTTON_LEFT)
+    ) {
+        *active_splitter_id = splitter_id;
+        if (out_delta != NULL) {
+            *out_delta = (vertical != 0) ? ctx->input.mouse.delta.x : ctx->input.mouse.delta.y;
+        }
+        return 1;
+    }
+
+    return 0;
+}
+
+void fission_nk_build_dock_zones(
+    const struct nk_rect *bounds,
+    float edge_fraction,
+    float min_edge_size,
+    struct nk_rect *out_zones
+)
+{
+    size_t i;
+    float edge_x;
+    float edge_y;
+    float inner_x;
+    float inner_y;
+    float inner_w;
+    float inner_h;
+
+    if (out_zones == NULL) {
+        return;
+    }
+
+    for (i = 0u; i < (size_t)FISSION_NK_DOCK_ZONE_COUNT; ++i) {
+        out_zones[i] = nk_rect(0.0f, 0.0f, 0.0f, 0.0f);
+    }
+
+    if (bounds == NULL || bounds->w <= 0.0f || bounds->h <= 0.0f) {
+        return;
+    }
+
+    edge_fraction = fission_nk_clamp_float(edge_fraction, 0.12f, 0.38f);
+    min_edge_size = fission_nk_clamp_float(min_edge_size, 16.0f, 320.0f);
+
+    edge_x = fission_nk_max_float(bounds->w * edge_fraction, min_edge_size);
+    edge_y = fission_nk_max_float(bounds->h * edge_fraction, min_edge_size);
+    edge_x = fission_nk_min_float(edge_x, bounds->w * 0.42f);
+    edge_y = fission_nk_min_float(edge_y, bounds->h * 0.42f);
+
+    inner_x = bounds->x + edge_x;
+    inner_y = bounds->y + edge_y;
+    inner_w = bounds->w - edge_x * 2.0f;
+    inner_h = bounds->h - edge_y * 2.0f;
+    if (inner_w < 1.0f) {
+        inner_w = 1.0f;
+    }
+    if (inner_h < 1.0f) {
+        inner_h = 1.0f;
+    }
+
+    out_zones[FISSION_NK_DOCK_ZONE_LEFT] = nk_rect(
+        bounds->x,
+        inner_y,
+        edge_x,
+        inner_h
+    );
+    out_zones[FISSION_NK_DOCK_ZONE_RIGHT] = nk_rect(
+        bounds->x + bounds->w - edge_x,
+        inner_y,
+        edge_x,
+        inner_h
+    );
+    out_zones[FISSION_NK_DOCK_ZONE_TOP] = nk_rect(
+        inner_x,
+        bounds->y,
+        inner_w,
+        edge_y
+    );
+    out_zones[FISSION_NK_DOCK_ZONE_BOTTOM] = nk_rect(
+        inner_x,
+        bounds->y + bounds->h - edge_y,
+        inner_w,
+        edge_y
+    );
+    out_zones[FISSION_NK_DOCK_ZONE_CENTER] = nk_rect(
+        inner_x,
+        inner_y,
+        inner_w,
+        inner_h
+    );
+}
+
+static int fission_nk_point_in_rect(
+    const struct nk_rect *rect,
+    float x,
+    float y
+)
+{
+    if (rect == NULL || rect->w <= 0.0f || rect->h <= 0.0f) {
+        return 0;
+    }
+
+    return (
+        x >= rect->x &&
+        y >= rect->y &&
+        x <= (rect->x + rect->w) &&
+        y <= (rect->y + rect->h)
+    );
+}
+
+fission_nk_dock_zone_t fission_nk_pick_dock_zone(
+    const struct nk_rect *zones,
+    float x,
+    float y
+)
+{
+    if (zones == NULL) {
+        return FISSION_NK_DOCK_ZONE_NONE;
+    }
+
+    if (fission_nk_point_in_rect(&zones[FISSION_NK_DOCK_ZONE_LEFT], x, y) != 0) {
+        return FISSION_NK_DOCK_ZONE_LEFT;
+    }
+    if (fission_nk_point_in_rect(&zones[FISSION_NK_DOCK_ZONE_RIGHT], x, y) != 0) {
+        return FISSION_NK_DOCK_ZONE_RIGHT;
+    }
+    if (fission_nk_point_in_rect(&zones[FISSION_NK_DOCK_ZONE_TOP], x, y) != 0) {
+        return FISSION_NK_DOCK_ZONE_TOP;
+    }
+    if (fission_nk_point_in_rect(&zones[FISSION_NK_DOCK_ZONE_BOTTOM], x, y) != 0) {
+        return FISSION_NK_DOCK_ZONE_BOTTOM;
+    }
+    if (fission_nk_point_in_rect(&zones[FISSION_NK_DOCK_ZONE_CENTER], x, y) != 0) {
+        return FISSION_NK_DOCK_ZONE_CENTER;
+    }
+
+    return FISSION_NK_DOCK_ZONE_NONE;
+}
+
+void fission_nk_draw_dock_zones_overlay(
+    struct nk_context *ctx,
+    const char *name,
+    const struct nk_rect *bounds,
+    const struct nk_rect *zones,
+    fission_nk_dock_zone_t hovered_zone
+)
+{
+    struct nk_command_buffer *canvas;
+    nk_flags flags;
+    size_t i;
+
+    if (ctx == NULL || name == NULL || bounds == NULL || zones == NULL) {
+        return;
+    }
+    if (bounds->w <= 0.0f || bounds->h <= 0.0f) {
+        return;
+    }
+
+    flags = NK_WINDOW_NO_SCROLLBAR | NK_WINDOW_NO_INPUT | NK_WINDOW_BACKGROUND;
+    if (!nk_begin(ctx, name, *bounds, flags)) {
+        nk_end(ctx);
+        return;
+    }
+
+    canvas = nk_window_get_canvas(ctx);
+    if (canvas == NULL) {
+        nk_end(ctx);
+        return;
+    }
+
+    for (i = 0u; i < (size_t)FISSION_NK_DOCK_ZONE_COUNT; ++i) {
+        struct nk_color fill;
+        struct nk_color border;
+        int active;
+
+        if (zones[i].w <= 0.0f || zones[i].h <= 0.0f) {
+            continue;
+        }
+
+        active = ((int)i == (int)hovered_zone);
+        if (active != 0) {
+            fill = nk_rgba(90, 124, 176, 132);
+            border = nk_rgba(208, 226, 255, 212);
+        } else {
+            fill = nk_rgba(60, 76, 104, 92);
+            border = nk_rgba(140, 162, 198, 138);
+        }
+
+        nk_fill_rect(canvas, zones[i], 7.0f, fill);
+        nk_stroke_rect(canvas, zones[i], 7.0f, 1.0f, border);
+    }
+
+    nk_end(ctx);
+}

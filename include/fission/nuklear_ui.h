@@ -6,6 +6,17 @@
 struct nk_context;
 struct nk_rect;
 
+#define FISSION_NK_DOCK_ZONE_COUNT 5
+
+typedef enum fission_nk_dock_zone {
+    FISSION_NK_DOCK_ZONE_NONE = -1,
+    FISSION_NK_DOCK_ZONE_LEFT = 0,
+    FISSION_NK_DOCK_ZONE_RIGHT = 1,
+    FISSION_NK_DOCK_ZONE_TOP = 2,
+    FISSION_NK_DOCK_ZONE_BOTTOM = 3,
+    FISSION_NK_DOCK_ZONE_CENTER = 4
+} fission_nk_dock_zone_t;
+
 void fission_nk_apply_theme(struct nk_context *ctx);
 
 void fission_nk_make_window_id(
@@ -29,6 +40,37 @@ void fission_nk_draw_splitter_overlay(
     int vertical,
     int active,
     int hovered
+);
+
+int fission_nk_update_splitter_interaction(
+    struct nk_context *ctx,
+    const struct nk_rect *rect,
+    int vertical,
+    int splitter_id,
+    int *active_splitter_id,
+    int *hovered_splitter_id,
+    float *out_delta
+);
+
+void fission_nk_build_dock_zones(
+    const struct nk_rect *bounds,
+    float edge_fraction,
+    float min_edge_size,
+    struct nk_rect *out_zones
+);
+
+fission_nk_dock_zone_t fission_nk_pick_dock_zone(
+    const struct nk_rect *zones,
+    float x,
+    float y
+);
+
+void fission_nk_draw_dock_zones_overlay(
+    struct nk_context *ctx,
+    const char *name,
+    const struct nk_rect *bounds,
+    const struct nk_rect *zones,
+    fission_nk_dock_zone_t hovered_zone
 );
 
 #endif
