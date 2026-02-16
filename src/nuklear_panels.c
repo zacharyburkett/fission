@@ -1336,6 +1336,123 @@ fission_nk_panel_status_t fission_nk_panel_workspace_register(
     return FISSION_NK_PANEL_STATUS_OK;
 }
 
+static void fission_nk_panel_workspace_toggle_detached(
+    fission_nk_panel_workspace_t *host,
+    size_t index,
+    const fission_nk_panel_bounds_t *window_bounds
+)
+{
+    fission_nk_panel_bounds_t bounds;
+
+    if (host == NULL || index >= host->count) {
+        return;
+    }
+
+    if (host->entries[index].state.detached != 0) {
+        (void)fission_nk_panel_workspace_set_panel_detached_at(host, index, 0);
+        return;
+    }
+
+    if (window_bounds != NULL) {
+        bounds = *window_bounds;
+    } else {
+        bounds = host->entries[index].state.resolved_bounds;
+    }
+
+    host->entries[index].state.detached_bounds = bounds;
+    fission_nk_panel_sanitize_detached_bounds(
+        host,
+        &host->entries[index].state.detached_bounds
+    );
+    (void)fission_nk_panel_workspace_set_panel_detached_at(host, index, 1);
+}
+
+int fission_nk_panel_workspace_begin_window(
+    struct nk_context *ctx,
+    fission_nk_panel_workspace_t *host,
+    const char *panel_id,
+    const char *title,
+    unsigned int extra_flags,
+    fission_nk_panel_bounds_t *out_bounds
+)
+{
+    size_t index;
+    fission_nk_panel_entry_t *entry;
+    fission_nk_panel_bounds_t bounds;
+    struct nk_rect nk_bounds;
+    nk_flags flags;
+    const char *window_title;
+    int open;
+    int toggle_requested;
+
+    if (ctx == NULL || host == NULL || panel_id == NULL) {
+        return 0;
+    }
+
+    index = fission_nk_panel_find_index(host, panel_id);
+    if (index >= host->count) {
+        return 0;
+    }
+
+    entry = &host->entries[index];
+    bounds = entry->state.resolved_bounds;
+
+    flags = NK_WINDOW_BORDER | NK_WINDOW_TITLE | (nk_flags)extra_flags;
+    if (entry->state.detachable != 0) {
+        flags |= NK_WINDOW_CLOSABLE;
+    }
+    if (entry->state.detached != 0) {
+        flags |= NK_WINDOW_MOVABLE | NK_WINDOW_SCALABLE | NK_WINDOW_MINIMIZABLE;
+    } else {
+        flags |= NK_WINDOW_BACKGROUND;
+    }
+
+    window_title = title;
+    if (window_title == NULL || window_title[0] == '\0') {
+        window_title = entry->desc.title;
+    }
+    if (window_title == NULL || window_title[0] == '\0') {
+        window_title = panel_id;
+    }
+
+    nk_bounds = fission_nk_panel_bounds_to_nk_rect(&bounds);
+    open = nk_begin_titled(ctx, panel_id, window_title, nk_bounds, flags);
+    nk_bounds = nk_window_get_bounds(ctx);
+
+    if (open != 0) {
+        fission_nk_focus_current_window_on_scroll(ctx);
+    }
+
+    toggle_requested = (
+        entry->state.detachable != 0 &&
+        nk_window_is_hidden(ctx, panel_id) != 0
+    );
+
+    bounds.x = nk_bounds.x;
+    bounds.y = nk_bounds.y;
+    bounds.w = nk_bounds.w;
+    bounds.h = nk_bounds.h;
+    if (entry->state.detached != 0) {
+        host->entries[index].state.detached_bounds = bounds;
+        fission_nk_panel_sanitize_detached_bounds(
+            host,
+            &host->entries[index].state.detached_bounds
+        );
+    }
+
+    if (toggle_requested != 0) {
+        nk_window_show(ctx, panel_id, NK_SHOWN);
+        fission_nk_panel_workspace_toggle_detached(host, index, &bounds);
+        open = 0;
+    }
+
+    if (out_bounds != NULL) {
+        *out_bounds = bounds;
+    }
+
+    return open;
+}
+
 void fission_nk_panel_workspace_draw_all(
     fission_nk_panel_workspace_t *host,
     struct nk_context *ctx,

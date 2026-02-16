@@ -111,6 +111,15 @@ void fission_nk_panel_workspace_draw_all(
     int window_height
 );
 
+int fission_nk_panel_workspace_begin_window(
+    struct nk_context *ctx,
+    fission_nk_panel_workspace_t *workspace,
+    const char *panel_id,
+    const char *title,
+    unsigned int extra_flags,
+    fission_nk_panel_bounds_t *out_bounds
+);
+
 void fission_nk_panel_workspace_shutdown(fission_nk_panel_workspace_t *workspace);
 
 size_t fission_nk_panel_workspace_count(const fission_nk_panel_workspace_t *workspace);
