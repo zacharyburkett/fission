@@ -10,6 +10,7 @@ struct nk_context;
 #define FISSION_NK_PANEL_HEADER_BUTTON_WIDTH 56.0f
 #define FISSION_NK_PANEL_HEADER_BUTTON_HEIGHT 18.0f
 #define FISSION_NK_PANEL_HEADER_BUTTON_MARGIN 6.0f
+#define FISSION_NK_PANEL_WINDOW_NO_SCROLL_FOCUS (1u << 30)
 
 typedef struct fission_nk_panel_workspace fission_nk_panel_workspace_t;
 
@@ -33,6 +34,11 @@ typedef struct fission_nk_panel_bounds {
     float w;
     float h;
 } fission_nk_panel_bounds_t;
+
+typedef void (*fission_nk_panel_workspace_reset_layout_fn)(
+    fission_nk_panel_workspace_t *workspace,
+    void *user_data
+);
 
 typedef fission_nk_panel_status_t (*fission_nk_panel_init_fn)(void *user_data);
 typedef void (*fission_nk_panel_shutdown_fn)(void *user_data);
@@ -211,6 +217,50 @@ void fission_nk_panel_workspace_set_row_ratios(
     fission_nk_panel_workspace_t *workspace,
     float top_ratio,
     float bottom_ratio
+);
+
+void fission_nk_panel_workspace_show_all(fission_nk_panel_workspace_t *workspace);
+void fission_nk_panel_workspace_hide_all(fission_nk_panel_workspace_t *workspace);
+
+void fission_nk_panel_workspace_draw_window_menu(
+    struct nk_context *ctx,
+    fission_nk_panel_workspace_t *workspace,
+    const char *menu_label,
+    float menu_width,
+    float menu_height,
+    const char *reset_button_label,
+    fission_nk_panel_workspace_reset_layout_fn reset_layout,
+    void *reset_layout_user_data
+);
+
+void fission_nk_panel_workspace_draw_panels_menu(
+    struct nk_context *ctx,
+    fission_nk_panel_workspace_t *workspace,
+    const char *menu_label,
+    float menu_width,
+    float menu_height
+);
+
+typedef struct fission_nk_panel_menu_bar_config {
+    const char *window_id;
+    const char *title_label;
+    const char *shortcut_label;
+    const char *window_menu_label;
+    const char *panels_menu_label;
+    const char *reset_button_label;
+    float height;
+    float window_menu_width;
+    float panels_menu_width;
+    float title_width;
+} fission_nk_panel_menu_bar_config_t;
+
+void fission_nk_panel_workspace_draw_menu_bar(
+    struct nk_context *ctx,
+    fission_nk_panel_workspace_t *workspace,
+    int window_width,
+    const fission_nk_panel_menu_bar_config_t *config,
+    fission_nk_panel_workspace_reset_layout_fn reset_layout,
+    void *reset_layout_user_data
 );
 
 #endif

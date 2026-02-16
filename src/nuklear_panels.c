@@ -1,7 +1,6 @@
 #include "fission/nuklear_panels.h"
 
 #include <stdio.h>
-#include <stdarg.h>
 #include <string.h>
 
 #include "fission/nuklear_features.h"
@@ -1384,6 +1383,7 @@ int fission_nk_panel_workspace_begin_window(
     const char *window_title;
     int open;
     int toggle_requested;
+    int focus_on_scroll;
 
     if (ctx == NULL || host == NULL || panel_id == NULL) {
         return 0;
@@ -1396,6 +1396,9 @@ int fission_nk_panel_workspace_begin_window(
 
     entry = &host->entries[index];
     bounds = entry->state.resolved_bounds;
+
+    focus_on_scroll = ((extra_flags & FISSION_NK_PANEL_WINDOW_NO_SCROLL_FOCUS) == 0u);
+    extra_flags &= ~FISSION_NK_PANEL_WINDOW_NO_SCROLL_FOCUS;
 
     flags = NK_WINDOW_BORDER | NK_WINDOW_TITLE | (nk_flags)extra_flags;
     if (entry->state.detachable != 0) {
@@ -1419,7 +1422,7 @@ int fission_nk_panel_workspace_begin_window(
     open = nk_begin_titled(ctx, panel_id, window_title, nk_bounds, flags);
     nk_bounds = nk_window_get_bounds(ctx);
 
-    if (open != 0) {
+    if (open != 0 && focus_on_scroll != 0) {
         fission_nk_focus_current_window_on_scroll(ctx);
     }
 
@@ -1897,4 +1900,336 @@ void fission_nk_panel_workspace_set_row_ratios(
 
     host->top_row_ratio = top_ratio;
     host->bottom_row_ratio = bottom_ratio;
+}
+
+static const char *fission_nk_panel_menu_label_or_default(
+    const char *value,
+    const char *fallback
+)
+{
+    if (value == NULL || value[0] == '\0') {
+        return fallback;
+    }
+    return value;
+}
+
+static float fission_nk_panel_menu_dim_or_default(float value, float fallback)
+{
+    if (value > 1.0f) {
+        return value;
+    }
+    return fallback;
+}
+
+void fission_nk_panel_workspace_show_all(fission_nk_panel_workspace_t *host)
+{
+    size_t i;
+
+    if (host == NULL) {
+        return;
+    }
+
+    for (i = 0u; i < host->count; ++i) {
+        (void)fission_nk_panel_workspace_set_panel_visible_at(host, i, 1);
+    }
+}
+
+void fission_nk_panel_workspace_hide_all(fission_nk_panel_workspace_t *host)
+{
+    size_t i;
+
+    if (host == NULL) {
+        return;
+    }
+
+    for (i = 0u; i < host->count; ++i) {
+        (void)fission_nk_panel_workspace_set_panel_visible_at(host, i, 0);
+    }
+}
+
+void fission_nk_panel_workspace_draw_window_menu(
+    struct nk_context *ctx,
+    fission_nk_panel_workspace_t *host,
+    const char *menu_label,
+    float menu_width,
+    float menu_height,
+    const char *reset_button_label,
+    fission_nk_panel_workspace_reset_layout_fn reset_layout,
+    void *reset_layout_user_data
+)
+{
+    float left_ratio;
+    float right_ratio;
+    float top_ratio;
+    float bottom_ratio;
+    const char *resolved_menu_label;
+    const char *resolved_reset_label;
+
+    if (ctx == NULL || host == NULL) {
+        return;
+    }
+
+    resolved_menu_label = fission_nk_panel_menu_label_or_default(menu_label, "Window");
+    menu_width = fission_nk_panel_menu_dim_or_default(menu_width, 300.0f);
+    menu_height = fission_nk_panel_menu_dim_or_default(menu_height, 340.0f);
+    resolved_reset_label = fission_nk_panel_menu_label_or_default(
+        reset_button_label,
+        "Reset Layout"
+    );
+
+    if (
+        !nk_menu_begin_label(
+            ctx,
+            resolved_menu_label,
+            NK_TEXT_LEFT,
+            nk_vec2(menu_width, menu_height)
+        )
+    ) {
+        return;
+    }
+
+    fission_nk_panel_workspace_get_column_ratios(host, &left_ratio, &right_ratio);
+    fission_nk_panel_workspace_get_row_ratios(host, &top_ratio, &bottom_ratio);
+
+    nk_layout_row_dynamic(ctx, 24.0f, 1);
+    nk_label(ctx, "Docked Layout", NK_TEXT_LEFT);
+
+    nk_layout_row_dynamic(ctx, 24.0f, 1);
+    nk_property_float(ctx, "Left Ratio", 0.10f, &left_ratio, 0.50f, 0.01f, 0.005f);
+    nk_layout_row_dynamic(ctx, 24.0f, 1);
+    nk_property_float(ctx, "Right Ratio", 0.10f, &right_ratio, 0.50f, 0.01f, 0.005f);
+    fission_nk_panel_workspace_set_column_ratios(host, left_ratio, right_ratio);
+
+    nk_layout_row_dynamic(ctx, 24.0f, 1);
+    nk_property_float(ctx, "Top Ratio", 0.10f, &top_ratio, 0.45f, 0.01f, 0.005f);
+    nk_layout_row_dynamic(ctx, 24.0f, 1);
+    nk_property_float(ctx, "Bottom Ratio", 0.10f, &bottom_ratio, 0.45f, 0.01f, 0.005f);
+    fission_nk_panel_workspace_set_row_ratios(host, top_ratio, bottom_ratio);
+
+    nk_layout_row_dynamic(ctx, 28.0f, 1);
+    if (nk_button_label(ctx, resolved_reset_label)) {
+        if (reset_layout != NULL) {
+            reset_layout(host, reset_layout_user_data);
+        }
+    }
+
+    nk_layout_row_dynamic(ctx, 24.0f, 1);
+    if (nk_button_label(ctx, "Show All Panels")) {
+        fission_nk_panel_workspace_show_all(host);
+    }
+
+    nk_menu_end(ctx);
+}
+
+void fission_nk_panel_workspace_draw_panels_menu(
+    struct nk_context *ctx,
+    fission_nk_panel_workspace_t *host,
+    const char *menu_label,
+    float menu_width,
+    float menu_height
+)
+{
+    size_t i;
+    int visible_count;
+    int total_count;
+    const char *resolved_menu_label;
+
+    if (ctx == NULL || host == NULL) {
+        return;
+    }
+
+    resolved_menu_label = fission_nk_panel_menu_label_or_default(menu_label, "Panels");
+    menu_width = fission_nk_panel_menu_dim_or_default(menu_width, 340.0f);
+    menu_height = fission_nk_panel_menu_dim_or_default(menu_height, 360.0f);
+
+    if (
+        !nk_menu_begin_label(
+            ctx,
+            resolved_menu_label,
+            NK_TEXT_LEFT,
+            nk_vec2(menu_width, menu_height)
+        )
+    ) {
+        return;
+    }
+
+    visible_count = 0;
+    total_count = (int)fission_nk_panel_workspace_count(host);
+    for (i = 0u; i < host->count; ++i) {
+        if (fission_nk_panel_workspace_panel_is_visible_at(host, i) != 0) {
+            visible_count += 1;
+        }
+    }
+
+    nk_layout_row_dynamic(ctx, 22.0f, 1);
+    nk_labelf(ctx, NK_TEXT_LEFT, "Visible: %d / %d", visible_count, total_count);
+    nk_layout_row_dynamic(ctx, 22.0f, 1);
+    nk_label(ctx, "Click to toggle", NK_TEXT_LEFT);
+
+    nk_layout_row_dynamic(ctx, 28.0f, 2);
+    if (nk_button_label(ctx, "Show All")) {
+        fission_nk_panel_workspace_show_all(host);
+    }
+    if (nk_button_label(ctx, "Hide All")) {
+        fission_nk_panel_workspace_hide_all(host);
+    }
+
+    nk_layout_row_dynamic(ctx, 8.0f, 1);
+    nk_spacing(ctx, 1);
+
+    for (i = 0u; i < host->count; ++i) {
+        const char *title;
+        char label[320];
+        int visible;
+        int detached;
+
+        title = fission_nk_panel_workspace_panel_title_at(host, i);
+        if (title == NULL) {
+            continue;
+        }
+
+        visible = fission_nk_panel_workspace_panel_is_visible_at(host, i);
+        detached = fission_nk_panel_workspace_panel_is_detached_at(host, i);
+
+        (void)snprintf(
+            label,
+            sizeof(label),
+            "%s %s%s",
+            (visible != 0) ? "[x]" : "[ ]",
+            title,
+            (detached != 0) ? " (floating)" : ""
+        );
+        nk_layout_row_dynamic(ctx, 24.0f, 1);
+        if (nk_menu_item_label(ctx, label, NK_TEXT_LEFT)) {
+            (void)fission_nk_panel_workspace_set_panel_visible_at(
+                host,
+                i,
+                (visible == 0) ? 1 : 0
+            );
+        }
+    }
+
+    nk_menu_end(ctx);
+}
+
+void fission_nk_panel_workspace_draw_menu_bar(
+    struct nk_context *ctx,
+    fission_nk_panel_workspace_t *host,
+    int window_width,
+    const fission_nk_panel_menu_bar_config_t *config,
+    fission_nk_panel_workspace_reset_layout_fn reset_layout,
+    void *reset_layout_user_data
+)
+{
+    struct nk_rect bounds;
+    nk_flags flags;
+    const char *window_id;
+    const char *title_label;
+    const char *shortcut_label;
+    const char *window_menu_label;
+    const char *panels_menu_label;
+    const char *reset_button_label;
+    float bar_height;
+    float window_menu_width;
+    float panels_menu_width;
+    float title_width;
+    float right_space;
+
+    if (ctx == NULL || host == NULL || window_width <= 0) {
+        return;
+    }
+
+    window_id = "__fission_panel_menu_bar";
+    title_label = "";
+    shortcut_label = "";
+    window_menu_label = "Window";
+    panels_menu_label = "Panels";
+    reset_button_label = "Reset Layout";
+    bar_height = 34.0f;
+    window_menu_width = 90.0f;
+    panels_menu_width = 90.0f;
+    title_width = 180.0f;
+
+    if (config != NULL) {
+        window_id = fission_nk_panel_menu_label_or_default(
+            config->window_id,
+            window_id
+        );
+        title_label = fission_nk_panel_menu_label_or_default(
+            config->title_label,
+            title_label
+        );
+        shortcut_label = fission_nk_panel_menu_label_or_default(
+            config->shortcut_label,
+            shortcut_label
+        );
+        window_menu_label = fission_nk_panel_menu_label_or_default(
+            config->window_menu_label,
+            window_menu_label
+        );
+        panels_menu_label = fission_nk_panel_menu_label_or_default(
+            config->panels_menu_label,
+            panels_menu_label
+        );
+        reset_button_label = fission_nk_panel_menu_label_or_default(
+            config->reset_button_label,
+            reset_button_label
+        );
+        bar_height = fission_nk_panel_menu_dim_or_default(config->height, bar_height);
+        window_menu_width = fission_nk_panel_menu_dim_or_default(
+            config->window_menu_width,
+            window_menu_width
+        );
+        panels_menu_width = fission_nk_panel_menu_dim_or_default(
+            config->panels_menu_width,
+            panels_menu_width
+        );
+        title_width = fission_nk_panel_menu_dim_or_default(
+            config->title_width,
+            title_width
+        );
+    }
+
+    bounds = nk_rect(0.0f, 0.0f, (float)window_width, bar_height);
+    flags = NK_WINDOW_BORDER | NK_WINDOW_NO_SCROLLBAR | NK_WINDOW_BACKGROUND;
+    if (!nk_begin(ctx, window_id, bounds, flags)) {
+        nk_end(ctx);
+        return;
+    }
+
+    nk_menubar_begin(ctx);
+    nk_layout_row_begin(ctx, NK_STATIC, 24.0f, 4);
+    nk_layout_row_push(ctx, window_menu_width);
+    fission_nk_panel_workspace_draw_window_menu(
+        ctx,
+        host,
+        window_menu_label,
+        300.0f,
+        340.0f,
+        reset_button_label,
+        reset_layout,
+        reset_layout_user_data
+    );
+    nk_layout_row_push(ctx, panels_menu_width);
+    fission_nk_panel_workspace_draw_panels_menu(
+        ctx,
+        host,
+        panels_menu_label,
+        340.0f,
+        360.0f
+    );
+    nk_layout_row_push(ctx, title_width);
+    nk_label(ctx, title_label, NK_TEXT_LEFT);
+
+    right_space = (float)window_width -
+        (window_menu_width + panels_menu_width + title_width + 30.0f);
+    if (right_space < 80.0f) {
+        right_space = 80.0f;
+    }
+    nk_layout_row_push(ctx, right_space);
+    nk_label(ctx, shortcut_label, NK_TEXT_RIGHT);
+
+    nk_layout_row_end(ctx);
+    nk_menubar_end(ctx);
+    nk_end(ctx);
 }
