@@ -32,6 +32,7 @@ void fission_nk_rect_intersection(
     const struct nk_rect *b,
     struct nk_rect *out_rect
 );
+void fission_nk_focus_current_window_on_scroll(struct nk_context *ctx);
 
 void fission_nk_draw_splitter_overlay(
     struct nk_context *ctx,

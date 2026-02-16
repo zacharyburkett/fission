@@ -161,6 +161,28 @@ void fission_nk_rect_intersection(
     *out_rect = nk_rect(left, top, right - left, bottom - top);
 }
 
+void fission_nk_focus_current_window_on_scroll(struct nk_context *ctx)
+{
+    if (ctx == NULL || ctx->current == NULL) {
+        return;
+    }
+    if (
+        ctx->input.mouse.scroll_delta.x == 0.0f &&
+        ctx->input.mouse.scroll_delta.y == 0.0f
+    ) {
+        return;
+    }
+    if (nk_input_is_mouse_down(&ctx->input, NK_BUTTON_LEFT)) {
+        return;
+    }
+    if (nk_window_is_hovered(ctx) == 0) {
+        return;
+    }
+
+    ctx->active = ctx->current;
+    ctx->current->flags &= ~(nk_flags)NK_WINDOW_ROM;
+}
+
 static void fission_nk_draw_splitter(
     struct nk_command_buffer *canvas,
     const struct nk_rect *bounds,

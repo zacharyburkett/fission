@@ -48,7 +48,11 @@ if(NOT FISSION_NUKLEAR_INCLUDE_DIR)
     )
 endif()
 
-add_library(fission src/nuklear_ui.c)
+add_library(
+    fission
+    src/nuklear_ui.c
+    src/nuklear_panels.c
+)
 add_library(fission::fission ALIAS fission)
 
 target_compile_features(fission PUBLIC c_std_11)
