@@ -32,7 +32,7 @@ if(NOT FISSION_NUKLEAR_INCLUDE_DIR AND FISSION_NUKLEAR_AUTO_FETCH)
     message(STATUS "FISSION: fetching Nuklear sources")
     FetchContent_Declare(
         fission_nuklear
-        GIT_REPOSITORY https://github.com/vurtun/nuklear.git
+        GIT_REPOSITORY https://github.com/Immediate-Mode-UI/Nuklear.git
         GIT_TAG master
     )
     FetchContent_MakeAvailable(fission_nuklear)
