@@ -11,6 +11,7 @@ struct nk_context;
 #define FISSION_NK_PANEL_HEADER_BUTTON_HEIGHT 18.0f
 #define FISSION_NK_PANEL_HEADER_BUTTON_MARGIN 6.0f
 #define FISSION_NK_PANEL_WINDOW_NO_SCROLL_FOCUS (1u << 30)
+#define FISSION_NK_PANEL_SLOT_COUNT 9
 
 typedef struct fission_nk_panel_workspace fission_nk_panel_workspace_t;
 
@@ -100,6 +101,8 @@ struct fission_nk_panel_workspace {
     int dragging_has_moved;
     float dragging_start_x;
     float dragging_start_y;
+    unsigned long long slot_touch_serial[FISSION_NK_PANEL_SLOT_COUNT];
+    unsigned long long next_slot_touch_serial;
     fission_nk_panel_bounds_t dock_workspace_bounds;
     fission_nk_panel_bounds_t splitter_left_bounds;
     fission_nk_panel_bounds_t splitter_right_bounds;
