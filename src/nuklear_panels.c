@@ -3,9 +3,8 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "fission/nuklear_features.h"
+#include "fission/nuklear.h"
 #include "fission/nuklear_ui.h"
-#include "nuklear.h"
 
 #define FISSION_NK_PANEL_MARGIN 12.0f
 #define FISSION_NK_PANEL_TOP_RESERVED 34.0f

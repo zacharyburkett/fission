@@ -60,10 +60,10 @@ target_include_directories(
     fission
     PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+        $<BUILD_INTERFACE:${FISSION_NUKLEAR_INCLUDE_DIR}>
         $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
     PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/src
-        ${FISSION_NUKLEAR_INCLUDE_DIR}
 )
 
 if(MSVC)
@@ -79,11 +79,6 @@ if(OpenGL_FOUND)
     add_library(fission::nuklear_render ALIAS fission_nuklear_render)
 
     target_compile_features(fission_nuklear_render PUBLIC c_std_11)
-    target_include_directories(
-        fission_nuklear_render
-        PRIVATE
-            ${FISSION_NUKLEAR_INCLUDE_DIR}
-    )
     target_link_libraries(
         fission_nuklear_render
         PUBLIC

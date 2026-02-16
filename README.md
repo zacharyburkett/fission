@@ -18,13 +18,17 @@ It provides:
 ## Public Headers
 
 - `include/fission/nuklear_features.h`
+- `include/fission/nuklear.h`
 - `include/fission/nuklear_ui.h`
 - `include/fission/nuklear_render.h`
+- `include/fission/nuklear_panels.h`
+- `include/fission/ui.h`
 
-`nuklear_features.h`:
+`nuklear.h`:
 
-- Defines shared `NK_INCLUDE_*` flags
-- Must be included before `nuklear.h`
+- Canonical Fission include for Nuklear
+- Applies shared `NK_INCLUDE_*` flags automatically
+- Supports `#define NK_IMPLEMENTATION` before include
 
 `nuklear_ui.h`:
 
@@ -84,12 +88,11 @@ endif()
 
 ## Usage
 
-Include shared Nuklear features before `nuklear.h`:
+Use the Fission Nuklear entrypoint:
 
 ```c
-#include "fission/nuklear_features.h"
 #define NK_IMPLEMENTATION
-#include "nuklear.h"
+#include "fission/nuklear.h"
 ```
 
 Apply theme and build stable window IDs:

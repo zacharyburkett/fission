@@ -3,7 +3,7 @@
 
 /*
  * Shared Nuklear feature surface for all engine/tool apps.
- * Include this before including <nuklear.h>.
+ * Prefer including "fission/nuklear.h" instead of using this header directly.
  */
 #define NK_INCLUDE_FIXED_TYPES
 #define NK_INCLUDE_STANDARD_IO

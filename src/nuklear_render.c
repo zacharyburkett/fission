@@ -20,8 +20,7 @@
 #include <GL/gl.h>
 #endif
 
-#include "fission/nuklear_features.h"
-#include "nuklear.h"
+#include "fission/nuklear.h"
 
 static GLint fission_nk_mag_filter_from_sampling(fission_nk_texture_sampling_t sampling)
 {
