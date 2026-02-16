@@ -42,6 +42,22 @@ void fission_nk_draw_splitter_overlay(
     int hovered
 );
 
+int fission_nk_begin_titled_group_in_space(
+    struct nk_context *ctx,
+    const char *group_id,
+    const char *title,
+    const struct nk_rect *bounds,
+    unsigned int flags
+);
+
+void fission_nk_draw_splitter_canvas(
+    struct nk_context *ctx,
+    const struct nk_rect *rect,
+    int vertical,
+    int active,
+    int hovered
+);
+
 int fission_nk_update_splitter_interaction(
     struct nk_context *ctx,
     const struct nk_rect *rect,

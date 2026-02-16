@@ -161,45 +161,22 @@ void fission_nk_rect_intersection(
     *out_rect = nk_rect(left, top, right - left, bottom - top);
 }
 
-void fission_nk_draw_splitter_overlay(
-    struct nk_context *ctx,
-    const char *name,
-    const struct nk_rect *rect,
+static void fission_nk_draw_splitter(
+    struct nk_command_buffer *canvas,
+    const struct nk_rect *bounds,
     int vertical,
     int active,
     int hovered
 )
 {
-    struct nk_command_buffer *canvas;
-    struct nk_rect bounds;
     struct nk_rect track_rect;
     struct nk_color track_color;
     struct nk_color grip_color;
     float grip_half_span;
     float center_x;
     float center_y;
-    nk_flags flags;
 
-    if (
-        ctx == NULL ||
-        name == NULL ||
-        rect == NULL ||
-        rect->w <= 0.0f ||
-        rect->h <= 0.0f
-    ) {
-        return;
-    }
-
-    flags = NK_WINDOW_NO_SCROLLBAR | NK_WINDOW_NO_INPUT | NK_WINDOW_BACKGROUND;
-    if (!nk_begin(ctx, name, *rect, flags)) {
-        nk_end(ctx);
-        return;
-    }
-
-    canvas = nk_window_get_canvas(ctx);
-    bounds = nk_window_get_bounds(ctx);
-    if (canvas == NULL || bounds.w <= 0.0f || bounds.h <= 0.0f) {
-        nk_end(ctx);
+    if (canvas == NULL || bounds == NULL || bounds->w <= 0.0f || bounds->h <= 0.0f) {
         return;
     }
 
@@ -215,23 +192,23 @@ void fission_nk_draw_splitter_overlay(
     }
 
     if (vertical != 0) {
-        track_rect = bounds;
+        track_rect = *bounds;
     } else {
         float thickness;
 
-        thickness = fission_nk_clamp_float(bounds.h * 0.16f, 1.0f, 2.0f);
+        thickness = fission_nk_clamp_float(bounds->h * 0.16f, 1.0f, 2.0f);
         track_rect = nk_rect(
-            bounds.x,
-            bounds.y + (bounds.h - thickness) * 0.5f,
-            bounds.w,
+            bounds->x,
+            bounds->y + (bounds->h - thickness) * 0.5f,
+            bounds->w,
             thickness
         );
     }
     nk_fill_rect(canvas, track_rect, 0.0f, track_color);
 
-    center_x = bounds.x + bounds.w * 0.5f;
-    center_y = bounds.y + bounds.h * 0.5f;
-    grip_half_span = (vertical != 0) ? bounds.h * 0.16f : bounds.w * 0.16f;
+    center_x = bounds->x + bounds->w * 0.5f;
+    center_y = bounds->y + bounds->h * 0.5f;
+    grip_half_span = (vertical != 0) ? bounds->h * 0.16f : bounds->w * 0.16f;
     grip_half_span = fission_nk_clamp_float(grip_half_span, 10.0f, 28.0f);
 
     if (vertical != 0) {
@@ -253,8 +230,98 @@ void fission_nk_draw_splitter_overlay(
         nk_stroke_line(canvas, t0, center_y, t1, center_y, 1.0f, grip_color);
         nk_stroke_line(canvas, t0, center_y + 0.5f, t1, center_y + 0.5f, 1.0f, grip_color);
     }
+}
+
+void fission_nk_draw_splitter_overlay(
+    struct nk_context *ctx,
+    const char *name,
+    const struct nk_rect *rect,
+    int vertical,
+    int active,
+    int hovered
+)
+{
+    struct nk_command_buffer *canvas;
+    nk_flags flags;
+
+    if (
+        ctx == NULL ||
+        name == NULL ||
+        rect == NULL ||
+        rect->w <= 0.0f ||
+        rect->h <= 0.0f
+    ) {
+        return;
+    }
+
+    flags = NK_WINDOW_NO_SCROLLBAR | NK_WINDOW_NO_INPUT | NK_WINDOW_BACKGROUND;
+    if (!nk_begin(ctx, name, *rect, flags)) {
+        nk_end(ctx);
+        return;
+    }
+
+    canvas = nk_window_get_canvas(ctx);
+    if (canvas == NULL) {
+        nk_end(ctx);
+        return;
+    }
+
+    fission_nk_draw_splitter(canvas, rect, vertical, active, hovered);
 
     nk_end(ctx);
+}
+
+int fission_nk_begin_titled_group_in_space(
+    struct nk_context *ctx,
+    const char *group_id,
+    const char *title,
+    const struct nk_rect *bounds,
+    unsigned int flags
+)
+{
+    struct nk_rect resolved_bounds;
+
+    if (
+        ctx == NULL ||
+        group_id == NULL ||
+        title == NULL ||
+        bounds == NULL
+    ) {
+        return 0;
+    }
+
+    resolved_bounds = *bounds;
+    if (resolved_bounds.w <= 0.0f) {
+        resolved_bounds.w = 1.0f;
+    }
+    if (resolved_bounds.h <= 0.0f) {
+        resolved_bounds.h = 1.0f;
+    }
+
+    nk_layout_space_push(ctx, resolved_bounds);
+    return nk_group_begin_titled(ctx, group_id, title, (nk_flags)flags);
+}
+
+void fission_nk_draw_splitter_canvas(
+    struct nk_context *ctx,
+    const struct nk_rect *rect,
+    int vertical,
+    int active,
+    int hovered
+)
+{
+    struct nk_command_buffer *canvas;
+
+    if (ctx == NULL || rect == NULL || rect->w <= 0.0f || rect->h <= 0.0f) {
+        return;
+    }
+
+    canvas = nk_window_get_canvas(ctx);
+    if (canvas == NULL) {
+        return;
+    }
+
+    fission_nk_draw_splitter(canvas, rect, vertical, active, hovered);
 }
 
 int fission_nk_update_splitter_interaction(
