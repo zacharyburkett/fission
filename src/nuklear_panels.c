@@ -1236,6 +1236,258 @@ static void fission_nk_panel_host_draw_drag_overlay(
     );
 }
 
+static struct nk_rect fission_nk_panel_window_hover_bounds(
+    const struct nk_context *ctx,
+    const struct nk_window *window
+)
+{
+    struct nk_rect bounds;
+
+    bounds = nk_rect(0.0f, 0.0f, 0.0f, 0.0f);
+    if (ctx == NULL || window == NULL) {
+        return bounds;
+    }
+
+    bounds = window->bounds;
+    if (window->flags & NK_WINDOW_MINIMIZED) {
+        float header_height;
+
+        if (ctx->style.font != NULL) {
+            header_height = ctx->style.font->height +
+                2.0f * ctx->style.window.header.padding.y +
+                (2.0f * ctx->style.window.header.label_padding.y);
+        } else {
+            header_height = 24.0f;
+        }
+        bounds.h = header_height;
+    }
+
+    return bounds;
+}
+
+static size_t fission_nk_panel_host_index_from_window_name(
+    const fission_nk_panel_workspace_t *host,
+    const char *window_name
+)
+{
+    size_t i;
+
+    if (host == NULL || window_name == NULL) {
+        return FISSION_NK_MAX_PANELS;
+    }
+
+    for (i = 0u; i < host->count; ++i) {
+        if (host->entries[i].state.visible == 0) {
+            continue;
+        }
+        if (strcmp(window_name, host->entries[i].desc.id) == 0) {
+            return i;
+        }
+    }
+
+    return host->count;
+}
+
+static const struct nk_window *fission_nk_panel_host_find_window_by_name_const(
+    const struct nk_context *ctx,
+    const char *window_name
+)
+{
+    const struct nk_window *window;
+
+    if (ctx == NULL || window_name == NULL) {
+        return NULL;
+    }
+
+    window = ctx->begin;
+    while (window != NULL) {
+        if (strcmp(window->name_string, window_name) == 0) {
+            return window;
+        }
+        window = window->next;
+    }
+
+    return NULL;
+}
+
+static struct nk_window *fission_nk_panel_host_find_window_by_name(
+    struct nk_context *ctx,
+    const char *window_name
+)
+{
+    struct nk_window *window;
+
+    if (ctx == NULL || window_name == NULL) {
+        return NULL;
+    }
+
+    window = ctx->begin;
+    while (window != NULL) {
+        if (strcmp(window->name_string, window_name) == 0) {
+            return window;
+        }
+        window = window->next;
+    }
+
+    return NULL;
+}
+
+static struct nk_rect fission_nk_panel_host_hover_bounds_for_index(
+    const fission_nk_panel_workspace_t *host,
+    const struct nk_context *ctx,
+    size_t index
+)
+{
+    const struct nk_window *window;
+
+    if (host == NULL || ctx == NULL || index >= host->count) {
+        return nk_rect(0.0f, 0.0f, 0.0f, 0.0f);
+    }
+
+    window = fission_nk_panel_host_find_window_by_name_const(
+        ctx,
+        host->entries[index].desc.id
+    );
+    if (window != NULL) {
+        return fission_nk_panel_window_hover_bounds(ctx, window);
+    }
+
+    return fission_nk_panel_bounds_to_nk_rect(&host->entries[index].state.resolved_bounds);
+}
+
+static int fission_nk_panel_host_index_hovered(
+    const fission_nk_panel_workspace_t *host,
+    const struct nk_context *ctx,
+    size_t index
+)
+{
+    struct nk_rect hover_bounds;
+
+    if (host == NULL || ctx == NULL || index >= host->count) {
+        return 0;
+    }
+    if (host->entries[index].state.visible == 0) {
+        return 0;
+    }
+
+    hover_bounds = fission_nk_panel_host_hover_bounds_for_index(host, ctx, index);
+    return (
+        hover_bounds.w > 0.0f &&
+        hover_bounds.h > 0.0f &&
+        nk_input_is_mouse_hovering_rect(&ctx->input, hover_bounds) != 0
+    );
+}
+
+static size_t fission_nk_panel_host_resolve_hovered_panel_index(
+    const fission_nk_panel_workspace_t *host,
+    const struct nk_context *ctx
+)
+{
+    size_t i;
+    size_t active_index;
+
+    if (host == NULL || ctx == NULL) {
+        return FISSION_NK_MAX_PANELS;
+    }
+
+    active_index = host->count;
+    if (ctx->active != NULL) {
+        active_index = fission_nk_panel_host_index_from_window_name(
+            host,
+            ctx->active->name_string
+        );
+    }
+
+    if (
+        active_index < host->count &&
+        host->entries[active_index].state.detached != 0 &&
+        fission_nk_panel_host_index_hovered(host, ctx, active_index) != 0
+    ) {
+        return active_index;
+    }
+
+    for (i = host->count; i > 0u; --i) {
+        size_t index;
+
+        index = i - 1u;
+        if (host->entries[index].state.detached == 0) {
+            continue;
+        }
+        if (fission_nk_panel_host_index_hovered(host, ctx, index) != 0) {
+            return index;
+        }
+    }
+
+    if (
+        active_index < host->count &&
+        host->entries[active_index].state.detached == 0 &&
+        fission_nk_panel_host_index_hovered(host, ctx, active_index) != 0
+    ) {
+        return active_index;
+    }
+
+    for (i = 0u; i < host->count; ++i) {
+        if (host->entries[i].state.detached != 0) {
+            continue;
+        }
+        if (fission_nk_panel_host_index_hovered(host, ctx, i) != 0) {
+            return i;
+        }
+    }
+
+    return host->count;
+}
+
+static size_t fission_nk_panel_host_find_scroll_target(
+    const fission_nk_panel_workspace_t *host,
+    const struct nk_context *ctx,
+    struct nk_window **out_root_window
+)
+{
+    if (out_root_window != NULL) {
+        *out_root_window = NULL;
+    }
+
+    return fission_nk_panel_host_resolve_hovered_panel_index(host, ctx);
+}
+
+static size_t fission_nk_panel_host_activate_hovered_panel_on_scroll(
+    const fission_nk_panel_workspace_t *host,
+    struct nk_context *ctx
+)
+{
+    size_t target_index;
+    struct nk_window *target_window;
+
+    if (host == NULL || ctx == NULL) {
+        return host != NULL ? host->count : FISSION_NK_MAX_PANELS;
+    }
+    if (
+        ctx->input.mouse.scroll_delta.x == 0.0f &&
+        ctx->input.mouse.scroll_delta.y == 0.0f
+    ) {
+        return host->count;
+    }
+    if (nk_input_is_mouse_down(&ctx->input, NK_BUTTON_LEFT)) {
+        return host->count;
+    }
+
+    target_index = fission_nk_panel_host_find_scroll_target(host, ctx, NULL);
+    if (target_index >= host->count) {
+        return host->count;
+    }
+
+    target_window = fission_nk_panel_host_find_window_by_name(
+        ctx,
+        host->entries[target_index].desc.id
+    );
+    if (target_window != NULL) {
+        ctx->active = target_window;
+        target_window->flags &= ~(nk_flags)NK_WINDOW_ROM;
+    }
+    return target_index;
+}
+
 void fission_nk_panel_workspace_init(
     fission_nk_panel_workspace_t *host
 )
@@ -1468,6 +1720,10 @@ void fission_nk_panel_workspace_draw_all(
     int visible_snapshot[FISSION_NK_MAX_PANELS];
     int detached_snapshot[FISSION_NK_MAX_PANELS];
     int drawn[FISSION_NK_MAX_PANELS];
+    float original_scroll_x;
+    float original_scroll_y;
+    size_t scroll_target_index;
+    int scroll_routing_enabled;
 
     if (host == NULL || ctx == NULL || window_width <= 0 || window_height <= 0) {
         return;
@@ -1485,6 +1741,14 @@ void fission_nk_panel_workspace_draw_all(
         (void)fission_nk_panel_host_resolve_layout(host, window_width, window_height);
     }
 
+    original_scroll_x = ctx->input.mouse.scroll_delta.x;
+    original_scroll_y = ctx->input.mouse.scroll_delta.y;
+    scroll_target_index = fission_nk_panel_host_activate_hovered_panel_on_scroll(host, ctx);
+    scroll_routing_enabled = (
+        (original_scroll_x != 0.0f || original_scroll_y != 0.0f) &&
+        scroll_target_index < host->count
+    );
+
     for (i = 0u; i < host->count; ++i) {
         visible_snapshot[i] = host->entries[i].state.visible;
         detached_snapshot[i] = host->entries[i].state.detached;
@@ -1497,6 +1761,16 @@ void fission_nk_panel_workspace_draw_all(
         entry = &host->entries[i];
         if (visible_snapshot[i] == 0 || detached_snapshot[i] != 0) {
             continue;
+        }
+
+        if (scroll_routing_enabled != 0) {
+            if (i == scroll_target_index) {
+                ctx->input.mouse.scroll_delta.x = original_scroll_x;
+                ctx->input.mouse.scroll_delta.y = original_scroll_y;
+            } else {
+                ctx->input.mouse.scroll_delta.x = 0.0f;
+                ctx->input.mouse.scroll_delta.y = 0.0f;
+            }
         }
 
         entry->desc.draw(
@@ -1518,6 +1792,16 @@ void fission_nk_panel_workspace_draw_all(
             continue;
         }
 
+        if (scroll_routing_enabled != 0) {
+            if (i == scroll_target_index) {
+                ctx->input.mouse.scroll_delta.x = original_scroll_x;
+                ctx->input.mouse.scroll_delta.y = original_scroll_y;
+            } else {
+                ctx->input.mouse.scroll_delta.x = 0.0f;
+                ctx->input.mouse.scroll_delta.y = 0.0f;
+            }
+        }
+
         entry->desc.draw(
             ctx,
             host,
@@ -1527,6 +1811,11 @@ void fission_nk_panel_workspace_draw_all(
             entry->desc.user_data
         );
         drawn[i] = 1;
+    }
+
+    if (scroll_routing_enabled != 0) {
+        ctx->input.mouse.scroll_delta.x = 0.0f;
+        ctx->input.mouse.scroll_delta.y = 0.0f;
     }
 
     fission_nk_panel_host_draw_splitter_overlays(host, ctx);

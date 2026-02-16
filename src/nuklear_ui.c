@@ -26,6 +26,81 @@ static float fission_nk_clamp_float(float value, float min_value, float max_valu
     return value;
 }
 
+static struct nk_rect fission_nk_window_hover_bounds(
+    const struct nk_context *ctx,
+    const struct nk_window *window
+)
+{
+    struct nk_rect bounds;
+
+    bounds = nk_rect(0.0f, 0.0f, 0.0f, 0.0f);
+    if (ctx == NULL || window == NULL) {
+        return bounds;
+    }
+
+    bounds = window->bounds;
+    if (window->flags & NK_WINDOW_MINIMIZED) {
+        float header_height;
+
+        if (ctx->style.font != NULL) {
+            header_height = ctx->style.font->height +
+                2.0f * ctx->style.window.header.padding.y +
+                (2.0f * ctx->style.window.header.label_padding.y);
+        } else {
+            header_height = 24.0f;
+        }
+        bounds.h = header_height;
+    }
+
+    return bounds;
+}
+
+static int fission_nk_current_window_is_topmost_hovered(const struct nk_context *ctx)
+{
+    const struct nk_window *iter;
+    struct nk_rect current_bounds;
+
+    if (ctx == NULL || ctx->current == NULL) {
+        return 0;
+    }
+    if (ctx->current->flags & NK_WINDOW_NO_INPUT) {
+        return 0;
+    }
+    if (nk_window_is_hovered(ctx) == 0) {
+        return 0;
+    }
+
+    current_bounds = fission_nk_window_hover_bounds(ctx, ctx->current);
+    if (nk_input_is_mouse_hovering_rect(&ctx->input, current_bounds) == 0) {
+        return 0;
+    }
+
+    iter = ctx->current->next;
+    while (iter != NULL) {
+        struct nk_rect iter_bounds;
+
+        if ((iter->flags & NK_WINDOW_HIDDEN) != 0 || (iter->flags & NK_WINDOW_NO_INPUT) != 0) {
+            iter = iter->next;
+            continue;
+        }
+
+        if (iter->popup.active && iter->popup.win != NULL) {
+            if (nk_input_is_mouse_hovering_rect(&ctx->input, iter->popup.win->bounds) != 0) {
+                return 0;
+            }
+        }
+
+        iter_bounds = fission_nk_window_hover_bounds(ctx, iter);
+        if (nk_input_is_mouse_hovering_rect(&ctx->input, iter_bounds) != 0) {
+            return 0;
+        }
+
+        iter = iter->next;
+    }
+
+    return 1;
+}
+
 void fission_nk_apply_theme(struct nk_context *ctx)
 {
     struct nk_color table[NK_COLOR_COUNT];
@@ -175,7 +250,7 @@ void fission_nk_focus_current_window_on_scroll(struct nk_context *ctx)
     if (nk_input_is_mouse_down(&ctx->input, NK_BUTTON_LEFT)) {
         return;
     }
-    if (nk_window_is_hovered(ctx) == 0) {
+    if (fission_nk_current_window_is_topmost_hovered(ctx) == 0) {
         return;
     }
 
@@ -302,6 +377,7 @@ int fission_nk_begin_titled_group_in_space(
 )
 {
     struct nk_rect resolved_bounds;
+    int open;
 
     if (
         ctx == NULL ||
@@ -321,7 +397,11 @@ int fission_nk_begin_titled_group_in_space(
     }
 
     nk_layout_space_push(ctx, resolved_bounds);
-    return nk_group_begin_titled(ctx, group_id, title, (nk_flags)flags);
+    open = nk_group_begin_titled(ctx, group_id, title, (nk_flags)flags);
+    if (open != 0) {
+        fission_nk_focus_current_window_on_scroll(ctx);
+    }
+    return open;
 }
 
 void fission_nk_draw_splitter_canvas(
