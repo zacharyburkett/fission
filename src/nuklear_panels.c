@@ -656,10 +656,24 @@ static int fission_nk_panel_host_resolve_layout(
     float top_panel_x1;
     float bottom_panel_x0;
     float bottom_panel_x1;
+    float center_panel_y0;
+    float center_panel_y1;
+    float top_left_panel_x0;
+    float top_left_panel_x1;
+    float top_right_panel_x0;
+    float top_right_panel_x1;
+    float bottom_left_panel_x0;
+    float bottom_left_panel_x1;
+    float bottom_right_panel_x0;
+    float bottom_right_panel_x1;
     int top_left_owner;
     int top_right_owner;
     int bottom_left_owner;
     int bottom_right_owner;
+    int expand_top_left_into_center;
+    int expand_top_right_into_center;
+    int expand_bottom_left_into_center;
+    int expand_bottom_right_into_center;
 
     if (host == NULL) {
         return 0;
@@ -1057,27 +1071,79 @@ static int fission_nk_panel_host_resolve_layout(
         FISSION_NK_CORNER_OWNER_RIGHT,
         FISSION_NK_CORNER_OWNER_BOTTOM
     );
+    expand_top_left_into_center = 0;
+    expand_top_right_into_center = 0;
+    expand_bottom_left_into_center = 0;
+    expand_bottom_right_into_center = 0;
+    if (has_top_band != 0 && has_top == 0 && has_center == 0) {
+        if (has_top_left != 0 && has_top_right != 0) {
+            if (
+                host->slot_touch_serial[(size_t)FISSION_NK_PANEL_SLOT_TOP_LEFT] >=
+                host->slot_touch_serial[(size_t)FISSION_NK_PANEL_SLOT_TOP_RIGHT]
+            ) {
+                expand_top_left_into_center = 1;
+            } else {
+                expand_top_right_into_center = 1;
+            }
+        } else if (has_top_left != 0) {
+            expand_top_left_into_center = 1;
+        } else if (has_top_right != 0) {
+            expand_top_right_into_center = 1;
+        }
+    }
+    if (has_bottom_band != 0 && has_bottom == 0 && has_center == 0) {
+        if (has_bottom_left != 0 && has_bottom_right != 0) {
+            if (
+                host->slot_touch_serial[(size_t)FISSION_NK_PANEL_SLOT_BOTTOM_LEFT] >=
+                host->slot_touch_serial[(size_t)FISSION_NK_PANEL_SLOT_BOTTOM_RIGHT]
+            ) {
+                expand_bottom_left_into_center = 1;
+            } else {
+                expand_bottom_right_into_center = 1;
+            }
+        } else if (has_bottom_left != 0) {
+            expand_bottom_left_into_center = 1;
+        } else if (has_bottom_right != 0) {
+            expand_bottom_right_into_center = 1;
+        }
+    }
 
     if (has_top_band != 0) {
         if (has_top_left != 0) {
+            top_left_panel_x0 = left_x;
+            top_left_panel_x1 = left_x + left_w;
+            if (expand_top_left_into_center != 0) {
+                top_left_panel_x1 = center_col_end_x;
+            }
+            if ((top_left_panel_x1 - top_left_panel_x0) < 1.0f) {
+                top_left_panel_x1 = top_left_panel_x0 + 1.0f;
+            }
             fission_nk_panel_layout_stack_vertical(
                 host,
                 top_left_indices,
                 top_left_count,
-                left_x,
+                top_left_panel_x0,
                 top_y,
-                left_w,
+                top_left_panel_x1 - top_left_panel_x0,
                 top_h
             );
         }
         if (has_top_right != 0) {
+            top_right_panel_x0 = right_x;
+            top_right_panel_x1 = right_x + right_w;
+            if (expand_top_right_into_center != 0) {
+                top_right_panel_x0 = center_col_start_x;
+            }
+            if ((top_right_panel_x1 - top_right_panel_x0) < 1.0f) {
+                top_right_panel_x1 = top_right_panel_x0 + 1.0f;
+            }
             fission_nk_panel_layout_stack_vertical(
                 host,
                 top_right_indices,
                 top_right_count,
-                right_x,
+                top_right_panel_x0,
                 top_y,
-                right_w,
+                top_right_panel_x1 - top_right_panel_x0,
                 top_h
             );
         }
@@ -1106,24 +1172,40 @@ static int fission_nk_panel_host_resolve_layout(
     }
     if (has_bottom_band != 0) {
         if (has_bottom_left != 0) {
+            bottom_left_panel_x0 = left_x;
+            bottom_left_panel_x1 = left_x + left_w;
+            if (expand_bottom_left_into_center != 0) {
+                bottom_left_panel_x1 = center_col_end_x;
+            }
+            if ((bottom_left_panel_x1 - bottom_left_panel_x0) < 1.0f) {
+                bottom_left_panel_x1 = bottom_left_panel_x0 + 1.0f;
+            }
             fission_nk_panel_layout_stack_vertical(
                 host,
                 bottom_left_indices,
                 bottom_left_count,
-                left_x,
+                bottom_left_panel_x0,
                 bottom_y,
-                left_w,
+                bottom_left_panel_x1 - bottom_left_panel_x0,
                 bottom_h
             );
         }
         if (has_bottom_right != 0) {
+            bottom_right_panel_x0 = right_x;
+            bottom_right_panel_x1 = right_x + right_w;
+            if (expand_bottom_right_into_center != 0) {
+                bottom_right_panel_x0 = center_col_start_x;
+            }
+            if ((bottom_right_panel_x1 - bottom_right_panel_x0) < 1.0f) {
+                bottom_right_panel_x1 = bottom_right_panel_x0 + 1.0f;
+            }
             fission_nk_panel_layout_stack_vertical(
                 host,
                 bottom_right_indices,
                 bottom_right_count,
-                right_x,
+                bottom_right_panel_x0,
                 bottom_y,
-                right_w,
+                bottom_right_panel_x1 - bottom_right_panel_x0,
                 bottom_h
             );
         }
@@ -1178,14 +1260,25 @@ static int fission_nk_panel_host_resolve_layout(
         );
     }
     if (has_center != 0) {
+        center_panel_y0 = mid_y;
+        center_panel_y1 = mid_y + mid_h;
+        if (has_top_band != 0 && has_top == 0) {
+            center_panel_y0 = top_y;
+        }
+        if (has_bottom_band != 0 && has_bottom == 0) {
+            center_panel_y1 = bottom_y + bottom_h;
+        }
+        if ((center_panel_y1 - center_panel_y0) < 1.0f) {
+            center_panel_y1 = center_panel_y0 + 1.0f;
+        }
         fission_nk_panel_layout_stack_vertical(
             host,
             center_indices,
             center_count,
             center_x,
-            mid_y,
+            center_panel_y0,
             center_w,
-            mid_h
+            center_panel_y1 - center_panel_y0
         );
     }
     if (has_right != 0) {
