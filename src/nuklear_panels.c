@@ -611,8 +611,10 @@ static void fission_nk_panel_sanitize_detached_bounds(
 
     min_width = 240.0f;
     min_height = 180.0f;
+    min_x = FISSION_NK_PANEL_MARGIN;
+    min_y = FISSION_NK_PANEL_MARGIN + FISSION_NK_PANEL_TOP_RESERVED;
     max_width = (float)host->last_window_width - FISSION_NK_PANEL_MARGIN * 2.0f;
-    max_height = (float)host->last_window_height - FISSION_NK_PANEL_MARGIN * 2.0f;
+    max_height = (float)host->last_window_height - FISSION_NK_PANEL_MARGIN - min_y;
 
     if (max_width < 1.0f) {
         max_width = 1.0f;
@@ -620,12 +622,16 @@ static void fission_nk_panel_sanitize_detached_bounds(
     if (max_height < 1.0f) {
         max_height = 1.0f;
     }
+    if (min_width > max_width) {
+        min_width = max_width;
+    }
+    if (min_height > max_height) {
+        min_height = max_height;
+    }
 
     bounds->w = fission_nk_panel_clamp_float(bounds->w, min_width, max_width);
     bounds->h = fission_nk_panel_clamp_float(bounds->h, min_height, max_height);
 
-    min_x = FISSION_NK_PANEL_MARGIN;
-    min_y = FISSION_NK_PANEL_MARGIN;
     max_x = (float)host->last_window_width - FISSION_NK_PANEL_MARGIN - bounds->w;
     max_y = (float)host->last_window_height - FISSION_NK_PANEL_MARGIN - bounds->h;
 
