@@ -17,6 +17,8 @@
 #define FISSION_NK_PANEL_MIN_HEIGHT 120.0f
 #define FISSION_NK_PANEL_DOCK_EDGE_FRACTION 0.24f
 #define FISSION_NK_PANEL_DOCK_MIN_EDGE_SIZE 110.0f
+#define FISSION_NK_PANEL_HEADER_BUTTON_GAP 4.0f
+#define FISSION_NK_PANEL_HEADER_ICON_PADDING 4.0f
 
 enum {
     FISSION_NK_PANEL_SPLITTER_NONE = 0,
@@ -219,10 +221,14 @@ static int fission_nk_panel_point_in_bounds(
 }
 
 static fission_nk_panel_bounds_t fission_nk_panel_header_button_bounds(
-    const fission_nk_panel_bounds_t *window_bounds
+    const fission_nk_panel_bounds_t *window_bounds,
+    int button_count
 )
 {
     fission_nk_panel_bounds_t bounds;
+    float button_width;
+    float total_width;
+    float gap;
 
     bounds.x = 0.0f;
     bounds.y = 0.0f;
@@ -235,8 +241,24 @@ static fission_nk_panel_bounds_t fission_nk_panel_header_button_bounds(
     ) {
         return bounds;
     }
+    if (button_count < 1) {
+        return bounds;
+    }
 
-    bounds.w = FISSION_NK_PANEL_HEADER_BUTTON_WIDTH;
+    button_width = FISSION_NK_PANEL_HEADER_BUTTON_HEIGHT + 6.0f;
+    if (button_width < 16.0f) {
+        button_width = 16.0f;
+    }
+    gap = FISSION_NK_PANEL_HEADER_BUTTON_GAP;
+    if (button_count == 1) {
+        gap = 0.0f;
+    }
+    total_width = button_width * (float)button_count + gap * (float)(button_count - 1);
+    if (total_width > FISSION_NK_PANEL_HEADER_BUTTON_WIDTH) {
+        total_width = FISSION_NK_PANEL_HEADER_BUTTON_WIDTH;
+    }
+
+    bounds.w = total_width;
     bounds.h = FISSION_NK_PANEL_HEADER_BUTTON_HEIGHT;
 
     if (window_bounds->w < bounds.w + FISSION_NK_PANEL_HEADER_BUTTON_MARGIN * 2.0f) {
@@ -259,6 +281,238 @@ static fission_nk_panel_bounds_t fission_nk_panel_header_button_bounds(
     }
 
     return bounds;
+}
+
+static struct nk_rect fission_nk_panel_header_button_rect_at(
+    const fission_nk_panel_bounds_t *window_bounds,
+    int button_count,
+    int button_index
+)
+{
+    fission_nk_panel_bounds_t area;
+    struct nk_rect rect;
+    float button_width;
+    float available_width;
+    float gap;
+
+    rect = nk_rect(0.0f, 0.0f, 0.0f, 0.0f);
+    if (window_bounds == NULL || button_count <= 0 || button_index < 0 || button_index >= button_count) {
+        return rect;
+    }
+
+    area = fission_nk_panel_header_button_bounds(window_bounds, button_count);
+    if (area.w <= 0.0f || area.h <= 0.0f) {
+        return rect;
+    }
+
+    gap = (button_count > 1) ? FISSION_NK_PANEL_HEADER_BUTTON_GAP : 0.0f;
+    available_width = area.w - gap * (float)(button_count - 1);
+    if (available_width <= 0.0f) {
+        available_width = area.w;
+        gap = 0.0f;
+    }
+    button_width = available_width / (float)button_count;
+    if (button_width < 1.0f) {
+        button_width = 1.0f;
+    }
+
+    rect.x = area.x + (button_width + gap) * (float)button_index;
+    rect.y = area.y;
+    rect.w = button_width;
+    rect.h = area.h;
+    return rect;
+}
+
+static void fission_nk_panel_draw_close_icon(
+    struct nk_command_buffer *canvas,
+    const struct nk_rect *rect,
+    struct nk_color color
+)
+{
+    float left;
+    float right;
+    float top;
+    float bottom;
+
+    if (canvas == NULL || rect == NULL || rect->w <= 0.0f || rect->h <= 0.0f) {
+        return;
+    }
+
+    left = rect->x + FISSION_NK_PANEL_HEADER_ICON_PADDING;
+    right = rect->x + rect->w - FISSION_NK_PANEL_HEADER_ICON_PADDING;
+    top = rect->y + FISSION_NK_PANEL_HEADER_ICON_PADDING;
+    bottom = rect->y + rect->h - FISSION_NK_PANEL_HEADER_ICON_PADDING;
+    if (right < left || bottom < top) {
+        return;
+    }
+
+    nk_stroke_line(canvas, left, top, right, bottom, 1.8f, color);
+    nk_stroke_line(canvas, right, top, left, bottom, 1.8f, color);
+}
+
+static void fission_nk_panel_draw_detach_icon(
+    struct nk_command_buffer *canvas,
+    const struct nk_rect *rect,
+    int detached,
+    struct nk_color color
+)
+{
+    struct nk_rect front;
+    struct nk_rect back;
+    float inset;
+
+    if (canvas == NULL || rect == NULL || rect->w <= 0.0f || rect->h <= 0.0f) {
+        return;
+    }
+
+    inset = FISSION_NK_PANEL_HEADER_ICON_PADDING;
+    if (inset * 2.0f >= rect->w || inset * 2.0f >= rect->h) {
+        inset = 1.0f;
+    }
+
+    front = nk_rect(
+        rect->x + inset + 1.0f,
+        rect->y + inset + 1.0f,
+        rect->w - inset * 2.0f - 1.0f,
+        rect->h - inset * 2.0f - 1.0f
+    );
+    if (front.w < 2.0f || front.h < 2.0f) {
+        return;
+    }
+
+    if (detached != 0) {
+        nk_stroke_rect(canvas, front, 0.0f, 1.6f, color);
+        nk_stroke_line(
+            canvas,
+            front.x + 2.0f,
+            front.y + 3.0f,
+            front.x + front.w - 2.0f,
+            front.y + 3.0f,
+            1.2f,
+            color
+        );
+        return;
+    }
+
+    back = front;
+    back.x -= 3.0f;
+    back.y += 2.0f;
+    if (back.w > 3.0f) {
+        back.w -= 1.0f;
+    }
+    if (back.h > 3.0f) {
+        back.h -= 1.0f;
+    }
+    nk_stroke_rect(canvas, back, 0.0f, 1.2f, color);
+    nk_stroke_rect(canvas, front, 0.0f, 1.6f, color);
+}
+
+static void fission_nk_panel_draw_header_buttons(
+    struct nk_context *ctx,
+    const fission_nk_panel_bounds_t *window_bounds,
+    int detachable,
+    int detached,
+    int *out_toggle_detached_requested,
+    int *out_close_requested
+)
+{
+    struct nk_command_buffer *canvas;
+    struct nk_rect close_rect;
+    struct nk_rect toggle_rect;
+    struct nk_color close_bg;
+    struct nk_color toggle_bg;
+    struct nk_color border;
+    struct nk_color icon_color;
+    struct nk_rect clip_rect;
+    struct nk_rect old_clip;
+    int button_count;
+    int close_hovered;
+    int toggle_hovered;
+    int close_pressed;
+    int toggle_pressed;
+
+    if (out_toggle_detached_requested != NULL) {
+        *out_toggle_detached_requested = 0;
+    }
+    if (out_close_requested != NULL) {
+        *out_close_requested = 0;
+    }
+    if (ctx == NULL || window_bounds == NULL) {
+        return;
+    }
+
+    button_count = (detachable != 0) ? 2 : 1;
+    close_rect = fission_nk_panel_header_button_rect_at(
+        window_bounds,
+        button_count,
+        button_count - 1
+    );
+    if (close_rect.w <= 0.0f || close_rect.h <= 0.0f) {
+        return;
+    }
+
+    close_hovered = nk_input_is_mouse_hovering_rect(&ctx->input, close_rect);
+    close_pressed = (
+        close_hovered != 0 &&
+        nk_input_is_mouse_down(&ctx->input, NK_BUTTON_LEFT)
+    );
+    close_bg = (close_hovered != 0) ? nk_rgba(168, 76, 76, 232) : nk_rgba(76, 88, 108, 214);
+    if (close_pressed != 0) {
+        close_bg = nk_rgba(191, 84, 84, 236);
+    }
+
+    border = nk_rgba(218, 227, 242, 230);
+    icon_color = nk_rgba(245, 248, 255, 245);
+
+    canvas = nk_window_get_canvas(ctx);
+    if (canvas == NULL) {
+        return;
+    }
+
+    clip_rect = nk_rect(
+        window_bounds->x,
+        window_bounds->y,
+        window_bounds->w,
+        FISSION_NK_PANEL_TITLE_BAR_HEIGHT
+    );
+    old_clip = canvas->clip;
+    nk_push_scissor(canvas, clip_rect);
+
+    if (detachable != 0) {
+        toggle_rect = fission_nk_panel_header_button_rect_at(window_bounds, button_count, 0);
+        toggle_hovered = nk_input_is_mouse_hovering_rect(&ctx->input, toggle_rect);
+        toggle_pressed = (
+            toggle_hovered != 0 &&
+            nk_input_is_mouse_down(&ctx->input, NK_BUTTON_LEFT)
+        );
+        toggle_bg = (toggle_hovered != 0) ? nk_rgba(92, 110, 139, 228) : nk_rgba(72, 88, 114, 214);
+        if (toggle_pressed != 0) {
+            toggle_bg = nk_rgba(108, 132, 164, 235);
+        }
+
+        nk_fill_rect(canvas, toggle_rect, 3.0f, toggle_bg);
+        nk_stroke_rect(canvas, toggle_rect, 3.0f, 1.0f, border);
+        fission_nk_panel_draw_detach_icon(canvas, &toggle_rect, detached, icon_color);
+    }
+
+    nk_fill_rect(canvas, close_rect, 3.0f, close_bg);
+    nk_stroke_rect(canvas, close_rect, 3.0f, 1.0f, border);
+    fission_nk_panel_draw_close_icon(canvas, &close_rect, icon_color);
+    nk_push_scissor(canvas, old_clip);
+
+    if (
+        out_toggle_detached_requested != NULL &&
+        detachable != 0 &&
+        nk_input_is_mouse_click_in_rect(&ctx->input, NK_BUTTON_LEFT, toggle_rect) != 0
+    ) {
+        *out_toggle_detached_requested = 1;
+    }
+    if (
+        out_close_requested != NULL &&
+        nk_input_is_mouse_click_in_rect(&ctx->input, NK_BUTTON_LEFT, close_rect) != 0
+    ) {
+        *out_close_requested = 1;
+    }
 }
 
 static size_t fission_nk_panel_find_index(
@@ -1552,10 +1806,15 @@ static void fission_nk_panel_host_begin_panel_drag(
             continue;
         }
 
-        if (entry->state.detachable != 0) {
+        {
             fission_nk_panel_bounds_t button_bounds;
+            int button_count;
 
-            button_bounds = fission_nk_panel_header_button_bounds(&entry->state.resolved_bounds);
+            button_count = (entry->state.detachable != 0) ? 2 : 1;
+            button_bounds = fission_nk_panel_header_button_bounds(
+                &entry->state.resolved_bounds,
+                button_count
+            );
             if (fission_nk_panel_point_in_bounds(&button_bounds, mouse_x, mouse_y) != 0) {
                 continue;
             }
@@ -2245,7 +2504,6 @@ int fission_nk_panel_workspace_begin_window(
     nk_flags flags;
     const char *window_title;
     int open;
-    int toggle_requested;
     int focus_on_scroll;
 
     if (ctx == NULL || host == NULL || panel_id == NULL) {
@@ -2264,11 +2522,8 @@ int fission_nk_panel_workspace_begin_window(
     extra_flags &= ~FISSION_NK_PANEL_WINDOW_NO_SCROLL_FOCUS;
 
     flags = NK_WINDOW_BORDER | NK_WINDOW_TITLE | (nk_flags)extra_flags;
-    if (entry->state.detachable != 0) {
-        flags |= NK_WINDOW_CLOSABLE;
-    }
     if (entry->state.detached != 0) {
-        flags |= NK_WINDOW_MOVABLE | NK_WINDOW_SCALABLE | NK_WINDOW_MINIMIZABLE;
+        flags |= NK_WINDOW_MOVABLE | NK_WINDOW_SCALABLE;
     } else {
         flags |= NK_WINDOW_BACKGROUND;
     }
@@ -2288,16 +2543,63 @@ int fission_nk_panel_workspace_begin_window(
     if (open != 0 && focus_on_scroll != 0) {
         fission_nk_focus_current_window_on_scroll(ctx);
     }
-
-    toggle_requested = (
-        entry->state.detachable != 0 &&
-        nk_window_is_hidden(ctx, panel_id) != 0
-    );
-
     bounds.x = nk_bounds.x;
     bounds.y = nk_bounds.y;
     bounds.w = nk_bounds.w;
     bounds.h = nk_bounds.h;
+
+    if (out_bounds != NULL) {
+        *out_bounds = bounds;
+    }
+
+    return open;
+}
+
+void fission_nk_panel_workspace_end_window(
+    struct nk_context *ctx,
+    fission_nk_panel_workspace_t *host,
+    const char *panel_id
+)
+{
+    size_t index;
+    fission_nk_panel_entry_t *entry;
+    struct nk_rect nk_bounds;
+    fission_nk_panel_bounds_t bounds;
+    int toggle_requested;
+    int close_requested;
+
+    if (ctx == NULL) {
+        return;
+    }
+    if (host == NULL || panel_id == NULL) {
+        nk_end(ctx);
+        return;
+    }
+
+    index = fission_nk_panel_find_index(host, panel_id);
+    if (index >= host->count) {
+        nk_end(ctx);
+        return;
+    }
+
+    entry = &host->entries[index];
+    nk_bounds = nk_window_get_bounds(ctx);
+    bounds.x = nk_bounds.x;
+    bounds.y = nk_bounds.y;
+    bounds.w = nk_bounds.w;
+    bounds.h = nk_bounds.h;
+
+    toggle_requested = 0;
+    close_requested = 0;
+    fission_nk_panel_draw_header_buttons(
+        ctx,
+        &bounds,
+        entry->state.detachable,
+        entry->state.detached,
+        &toggle_requested,
+        &close_requested
+    );
+
     if (entry->state.detached != 0) {
         host->entries[index].state.detached_bounds = bounds;
         fission_nk_panel_sanitize_detached_bounds(
@@ -2306,17 +2608,13 @@ int fission_nk_panel_workspace_begin_window(
         );
     }
 
-    if (toggle_requested != 0) {
-        nk_window_show(ctx, panel_id, NK_SHOWN);
+    if (close_requested != 0) {
+        (void)fission_nk_panel_workspace_set_panel_visible_at(host, index, 0);
+    } else if (toggle_requested != 0) {
         fission_nk_panel_workspace_toggle_detached(host, index, &bounds);
-        open = 0;
     }
 
-    if (out_bounds != NULL) {
-        *out_bounds = bounds;
-    }
-
-    return open;
+    nk_end(ctx);
 }
 
 void fission_nk_panel_workspace_draw_all(

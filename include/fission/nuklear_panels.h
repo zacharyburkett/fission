@@ -145,6 +145,11 @@ int fission_nk_panel_workspace_begin_window(
     unsigned int extra_flags,
     fission_nk_panel_bounds_t *out_bounds
 );
+void fission_nk_panel_workspace_end_window(
+    struct nk_context *ctx,
+    fission_nk_panel_workspace_t *workspace,
+    const char *panel_id
+);
 
 void fission_nk_panel_workspace_shutdown(fission_nk_panel_workspace_t *workspace);
 
