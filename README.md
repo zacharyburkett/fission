@@ -45,6 +45,13 @@ It provides:
 - `fission_nk_texture_upload_rgba8`
 - `fission_nk_texture_upload_rgba8_image`
 
+`nuklear_panels.h`:
+
+- Docked/floating panel workspace (`fission_nk_panel_workspace_t`)
+- Panel registration, layout, splitters, and panel menus
+- Multi-workspace tab state (`fission_nk_panel_workspace_tabs_t`)
+- Workspace tab menu bar rendering and tab operations (create/switch/rename/move/remove)
+
 ## Dependencies
 
 - Nuklear headers (`nuklear.h`) are required.
@@ -124,4 +131,65 @@ if (fission_nk_texture_upload_rgba8_image(
     nk_image(ctx, image);
 }
 fission_nk_texture_destroy(&texture);
+```
+
+## Panel Workspaces and Workspace Tabs
+
+Fission provides a reusable panel host for editor-style UIs:
+
+- `fission_nk_panel_workspace_t` manages docked/floating panel layout
+- `fission_nk_panel_workspace_tabs_t` stores multiple independent workspace layouts
+
+Minimal setup:
+
+```c
+#include "fission/nuklear_panels.h"
+
+fission_nk_panel_workspace_t workspace;
+fission_nk_panel_workspace_tabs_t workspace_tabs;
+
+fission_nk_panel_workspace_init(&workspace);
+fission_nk_panel_workspace_tabs_init(&workspace_tabs);
+
+/* Register each panel once. */
+fission_nk_panel_workspace_tabs_register_panel(
+    &workspace_tabs,
+    &workspace,
+    &panel_desc
+);
+```
+
+Per-frame usage:
+
+```c
+fission_nk_panel_workspace_tabs_menu_bar_config_t menu_cfg;
+memset(&menu_cfg, 0, sizeof(menu_cfg));
+menu_cfg.window_id = "__my_editor_menu";
+menu_cfg.shortcut_label = "F5 Reload  F6 Pause  F7 Step";
+menu_cfg.shortcut_compact_label = "F5/F6/F7";
+
+fission_nk_panel_workspace_tabs_draw_menu_bar(
+    ctx,
+    &workspace_tabs,
+    &workspace,
+    window_width,
+    &menu_cfg,
+    reset_layout_fn,
+    reset_layout_user_data
+);
+
+fission_nk_panel_workspace_tabs_draw_all(
+    &workspace_tabs,
+    &workspace,
+    ctx,
+    window_width,
+    window_height
+);
+```
+
+Shutdown:
+
+```c
+fission_nk_panel_workspace_tabs_shutdown(&workspace_tabs);
+fission_nk_panel_workspace_shutdown(&workspace);
 ```
