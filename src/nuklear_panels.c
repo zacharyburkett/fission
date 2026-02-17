@@ -3184,3 +3184,903 @@ void fission_nk_panel_workspace_draw_menu_bar(
     nk_menubar_end(ctx);
     nk_end(ctx);
 }
+
+static void fission_nk_panel_workspace_tabs_copy_name(
+    char *out_name,
+    size_t out_name_size,
+    const char *name
+)
+{
+    if (out_name == NULL || out_name_size == 0u) {
+        return;
+    }
+    if (name == NULL || name[0] == '\0') {
+        name = "Workspace";
+    }
+    (void)snprintf(out_name, out_name_size, "%s", name);
+}
+
+static void fission_nk_panel_workspace_tabs_make_default_name(
+    fission_nk_panel_workspace_tabs_t *tabs,
+    char *out_name,
+    size_t out_name_size
+)
+{
+    unsigned int ordinal;
+
+    if (tabs == NULL || out_name == NULL || out_name_size == 0u) {
+        return;
+    }
+
+    ordinal = tabs->next_tab_ordinal;
+    if (ordinal == 0u) {
+        ordinal = 1u;
+    }
+    tabs->next_tab_ordinal = ordinal + 1u;
+    (void)snprintf(out_name, out_name_size, "Workspace %u", ordinal);
+}
+
+static void fission_nk_panel_workspace_tabs_ensure_main(
+    fission_nk_panel_workspace_tabs_t *tabs,
+    const fission_nk_panel_workspace_t *active_workspace
+)
+{
+    if (tabs == NULL || active_workspace == NULL || tabs->tab_count != 0u) {
+        return;
+    }
+
+    tabs->tabs[0] = *active_workspace;
+    fission_nk_panel_workspace_tabs_copy_name(
+        tabs->tab_names[0],
+        sizeof(tabs->tab_names[0]),
+        "Main"
+    );
+    tabs->tab_count = 1u;
+    tabs->active_tab_index = 0u;
+    tabs->rename_source_index = (size_t)-1;
+}
+
+void fission_nk_panel_workspace_tabs_init(
+    fission_nk_panel_workspace_tabs_t *tabs
+)
+{
+    if (tabs == NULL) {
+        return;
+    }
+
+    memset(tabs, 0, sizeof(*tabs));
+    tabs->next_tab_ordinal = 1u;
+    tabs->rename_source_index = (size_t)-1;
+}
+
+void fission_nk_panel_workspace_tabs_shutdown(
+    fission_nk_panel_workspace_tabs_t *tabs
+)
+{
+    if (tabs == NULL) {
+        return;
+    }
+
+    memset(tabs, 0, sizeof(*tabs));
+    tabs->next_tab_ordinal = 1u;
+    tabs->rename_source_index = (size_t)-1;
+}
+
+void fission_nk_panel_workspace_tabs_commit_active(
+    fission_nk_panel_workspace_tabs_t *tabs,
+    const fission_nk_panel_workspace_t *active_workspace
+)
+{
+    if (tabs == NULL || active_workspace == NULL) {
+        return;
+    }
+    if (tabs->tab_count == 0u || tabs->active_tab_index >= tabs->tab_count) {
+        return;
+    }
+
+    tabs->tabs[tabs->active_tab_index] = *active_workspace;
+}
+
+void fission_nk_panel_workspace_tabs_load_active(
+    const fission_nk_panel_workspace_tabs_t *tabs,
+    fission_nk_panel_workspace_t *active_workspace
+)
+{
+    if (tabs == NULL || active_workspace == NULL) {
+        return;
+    }
+    if (tabs->tab_count == 0u || tabs->active_tab_index >= tabs->tab_count) {
+        return;
+    }
+
+    *active_workspace = tabs->tabs[tabs->active_tab_index];
+}
+
+fission_nk_panel_status_t fission_nk_panel_workspace_tabs_register_panel(
+    fission_nk_panel_workspace_tabs_t *tabs,
+    fission_nk_panel_workspace_t *active_workspace,
+    const fission_nk_panel_desc_t *panel
+)
+{
+    fission_nk_panel_status_t status;
+    size_t panel_index;
+    size_t i;
+
+    if (tabs == NULL || active_workspace == NULL || panel == NULL) {
+        return FISSION_NK_PANEL_STATUS_INVALID_ARGUMENT;
+    }
+
+    status = fission_nk_panel_workspace_register(active_workspace, panel);
+    if (status != FISSION_NK_PANEL_STATUS_OK) {
+        return status;
+    }
+
+    if (active_workspace->count == 0u) {
+        return FISSION_NK_PANEL_STATUS_RUNTIME_ERROR;
+    }
+
+    panel_index = active_workspace->count - 1u;
+    fission_nk_panel_workspace_tabs_ensure_main(tabs, active_workspace);
+    if (tabs->tab_count == 0u) {
+        return FISSION_NK_PANEL_STATUS_RUNTIME_ERROR;
+    }
+    if (tabs->tab_count == 1u && tabs->tabs[0].count == active_workspace->count) {
+        tabs->rename_source_index = (size_t)-1;
+        return FISSION_NK_PANEL_STATUS_OK;
+    }
+
+    for (i = 0u; i < tabs->tab_count; ++i) {
+        tabs->tabs[i].entries[panel_index] = active_workspace->entries[panel_index];
+        tabs->tabs[i].count = active_workspace->count;
+    }
+    fission_nk_panel_workspace_tabs_commit_active(tabs, active_workspace);
+    tabs->rename_source_index = (size_t)-1;
+    return FISSION_NK_PANEL_STATUS_OK;
+}
+
+void fission_nk_panel_workspace_tabs_draw_all(
+    fission_nk_panel_workspace_tabs_t *tabs,
+    fission_nk_panel_workspace_t *active_workspace,
+    struct nk_context *ctx,
+    int window_width,
+    int window_height
+)
+{
+    if (tabs == NULL || active_workspace == NULL || ctx == NULL) {
+        return;
+    }
+
+    fission_nk_panel_workspace_draw_all(active_workspace, ctx, window_width, window_height);
+    fission_nk_panel_workspace_tabs_commit_active(tabs, active_workspace);
+}
+
+size_t fission_nk_panel_workspace_tabs_count(
+    const fission_nk_panel_workspace_tabs_t *tabs
+)
+{
+    if (tabs == NULL) {
+        return 0u;
+    }
+    return tabs->tab_count;
+}
+
+size_t fission_nk_panel_workspace_tabs_active_index(
+    const fission_nk_panel_workspace_tabs_t *tabs
+)
+{
+    if (tabs == NULL || tabs->tab_count == 0u) {
+        return 0u;
+    }
+    if (tabs->active_tab_index >= tabs->tab_count) {
+        return 0u;
+    }
+    return tabs->active_tab_index;
+}
+
+const char *fission_nk_panel_workspace_tabs_name_at(
+    const fission_nk_panel_workspace_tabs_t *tabs,
+    size_t index
+)
+{
+    if (tabs == NULL || index >= tabs->tab_count) {
+        return NULL;
+    }
+    return tabs->tab_names[index];
+}
+
+fission_nk_panel_status_t fission_nk_panel_workspace_tabs_set_active(
+    fission_nk_panel_workspace_tabs_t *tabs,
+    fission_nk_panel_workspace_t *active_workspace,
+    size_t index
+)
+{
+    if (tabs == NULL || active_workspace == NULL) {
+        return FISSION_NK_PANEL_STATUS_INVALID_ARGUMENT;
+    }
+    if (tabs->tab_count == 0u || index >= tabs->tab_count) {
+        return FISSION_NK_PANEL_STATUS_INVALID_ARGUMENT;
+    }
+    if (index == tabs->active_tab_index) {
+        return FISSION_NK_PANEL_STATUS_OK;
+    }
+
+    fission_nk_panel_workspace_tabs_commit_active(tabs, active_workspace);
+    tabs->active_tab_index = index;
+    fission_nk_panel_workspace_tabs_load_active(tabs, active_workspace);
+    tabs->rename_source_index = (size_t)-1;
+    return FISSION_NK_PANEL_STATUS_OK;
+}
+
+fission_nk_panel_status_t fission_nk_panel_workspace_tabs_create(
+    fission_nk_panel_workspace_tabs_t *tabs,
+    fission_nk_panel_workspace_t *active_workspace,
+    const char *name,
+    size_t *out_index
+)
+{
+    size_t new_index;
+
+    if (tabs == NULL || active_workspace == NULL) {
+        return FISSION_NK_PANEL_STATUS_INVALID_ARGUMENT;
+    }
+    if (tabs->tab_count >= FISSION_NK_MAX_WORKSPACE_TABS) {
+        return FISSION_NK_PANEL_STATUS_RUNTIME_ERROR;
+    }
+
+    fission_nk_panel_workspace_tabs_ensure_main(tabs, active_workspace);
+    if (tabs->tab_count >= FISSION_NK_MAX_WORKSPACE_TABS) {
+        return FISSION_NK_PANEL_STATUS_RUNTIME_ERROR;
+    }
+
+    fission_nk_panel_workspace_tabs_commit_active(tabs, active_workspace);
+    new_index = tabs->tab_count;
+    tabs->tabs[new_index] = *active_workspace;
+    if (name != NULL && name[0] != '\0') {
+        fission_nk_panel_workspace_tabs_copy_name(
+            tabs->tab_names[new_index],
+            sizeof(tabs->tab_names[new_index]),
+            name
+        );
+    } else {
+        fission_nk_panel_workspace_tabs_make_default_name(
+            tabs,
+            tabs->tab_names[new_index],
+            sizeof(tabs->tab_names[new_index])
+        );
+    }
+
+    tabs->tab_count += 1u;
+    tabs->active_tab_index = new_index;
+    fission_nk_panel_workspace_tabs_load_active(tabs, active_workspace);
+    tabs->rename_source_index = (size_t)-1;
+    if (out_index != NULL) {
+        *out_index = new_index;
+    }
+    return FISSION_NK_PANEL_STATUS_OK;
+}
+
+fission_nk_panel_status_t fission_nk_panel_workspace_tabs_remove(
+    fission_nk_panel_workspace_tabs_t *tabs,
+    fission_nk_panel_workspace_t *active_workspace,
+    size_t index
+)
+{
+    size_t i;
+
+    if (tabs == NULL || active_workspace == NULL) {
+        return FISSION_NK_PANEL_STATUS_INVALID_ARGUMENT;
+    }
+    if (tabs->tab_count <= 1u) {
+        return FISSION_NK_PANEL_STATUS_RUNTIME_ERROR;
+    }
+    if (index >= tabs->tab_count) {
+        return FISSION_NK_PANEL_STATUS_INVALID_ARGUMENT;
+    }
+
+    fission_nk_panel_workspace_tabs_commit_active(tabs, active_workspace);
+    for (i = index; i + 1u < tabs->tab_count; ++i) {
+        tabs->tabs[i] = tabs->tabs[i + 1u];
+        memcpy(tabs->tab_names[i], tabs->tab_names[i + 1u], sizeof(tabs->tab_names[i]));
+    }
+
+    tabs->tab_count -= 1u;
+    memset(&tabs->tabs[tabs->tab_count], 0, sizeof(tabs->tabs[tabs->tab_count]));
+    memset(tabs->tab_names[tabs->tab_count], 0, sizeof(tabs->tab_names[tabs->tab_count]));
+
+    if (tabs->active_tab_index == index) {
+        if (index >= tabs->tab_count) {
+            tabs->active_tab_index = tabs->tab_count - 1u;
+        }
+    } else if (tabs->active_tab_index > index) {
+        tabs->active_tab_index -= 1u;
+    }
+
+    fission_nk_panel_workspace_tabs_load_active(tabs, active_workspace);
+    tabs->rename_source_index = (size_t)-1;
+    return FISSION_NK_PANEL_STATUS_OK;
+}
+
+fission_nk_panel_status_t fission_nk_panel_workspace_tabs_rename(
+    fission_nk_panel_workspace_tabs_t *tabs,
+    size_t index,
+    const char *name
+)
+{
+    if (tabs == NULL || name == NULL || name[0] == '\0') {
+        return FISSION_NK_PANEL_STATUS_INVALID_ARGUMENT;
+    }
+    if (index >= tabs->tab_count) {
+        return FISSION_NK_PANEL_STATUS_INVALID_ARGUMENT;
+    }
+
+    fission_nk_panel_workspace_tabs_copy_name(
+        tabs->tab_names[index],
+        sizeof(tabs->tab_names[index]),
+        name
+    );
+    tabs->rename_source_index = (size_t)-1;
+    return FISSION_NK_PANEL_STATUS_OK;
+}
+
+fission_nk_panel_status_t fission_nk_panel_workspace_tabs_move(
+    fission_nk_panel_workspace_tabs_t *tabs,
+    fission_nk_panel_workspace_t *active_workspace,
+    size_t from_index,
+    size_t to_index
+)
+{
+    fission_nk_panel_workspace_t moved_workspace;
+    char moved_name[FISSION_NK_WORKSPACE_TAB_NAME_MAX];
+    size_t i;
+
+    if (tabs == NULL || active_workspace == NULL) {
+        return FISSION_NK_PANEL_STATUS_INVALID_ARGUMENT;
+    }
+    if (from_index >= tabs->tab_count || to_index >= tabs->tab_count) {
+        return FISSION_NK_PANEL_STATUS_INVALID_ARGUMENT;
+    }
+    if (from_index == to_index) {
+        return FISSION_NK_PANEL_STATUS_OK;
+    }
+
+    fission_nk_panel_workspace_tabs_commit_active(tabs, active_workspace);
+    moved_workspace = tabs->tabs[from_index];
+    memcpy(moved_name, tabs->tab_names[from_index], sizeof(moved_name));
+
+    if (from_index < to_index) {
+        for (i = from_index; i < to_index; ++i) {
+            tabs->tabs[i] = tabs->tabs[i + 1u];
+            memcpy(tabs->tab_names[i], tabs->tab_names[i + 1u], sizeof(tabs->tab_names[i]));
+        }
+    } else {
+        for (i = from_index; i > to_index; --i) {
+            tabs->tabs[i] = tabs->tabs[i - 1u];
+            memcpy(tabs->tab_names[i], tabs->tab_names[i - 1u], sizeof(tabs->tab_names[i]));
+        }
+    }
+
+    tabs->tabs[to_index] = moved_workspace;
+    memcpy(tabs->tab_names[to_index], moved_name, sizeof(tabs->tab_names[to_index]));
+
+    if (tabs->active_tab_index == from_index) {
+        tabs->active_tab_index = to_index;
+    } else if (
+        from_index < to_index &&
+        tabs->active_tab_index > from_index &&
+        tabs->active_tab_index <= to_index
+    ) {
+        tabs->active_tab_index -= 1u;
+    } else if (
+        from_index > to_index &&
+        tabs->active_tab_index >= to_index &&
+        tabs->active_tab_index < from_index
+    ) {
+        tabs->active_tab_index += 1u;
+    }
+
+    fission_nk_panel_workspace_tabs_load_active(tabs, active_workspace);
+    tabs->rename_source_index = (size_t)-1;
+    return FISSION_NK_PANEL_STATUS_OK;
+}
+
+void fission_nk_panel_workspace_tabs_draw_menu_bar(
+    struct nk_context *ctx,
+    fission_nk_panel_workspace_tabs_t *tabs,
+    fission_nk_panel_workspace_t *active_workspace,
+    int window_width,
+    const fission_nk_panel_workspace_tabs_menu_bar_config_t *config,
+    fission_nk_panel_workspace_reset_layout_fn reset_layout,
+    void *reset_layout_user_data
+)
+{
+    struct nk_rect bounds;
+    nk_flags flags;
+    const char *window_id;
+    const char *shortcut_full_label;
+    const char *shortcut_compact_label;
+    const char *window_menu_label;
+    const char *panels_menu_label;
+    const char *workspace_menu_label;
+    const char *new_tab_button_label;
+    const char *new_tab_menu_item_label;
+    const char *close_active_tab_menu_item_label;
+    const char *move_left_button_label;
+    const char *move_right_button_label;
+    const char *rename_apply_button_label;
+    const char *rename_field_prefix_label;
+    const char *switch_section_label;
+    const char *reset_button_label;
+    const char *shortcut_label;
+    float bar_height;
+    float window_menu_width;
+    float panels_menu_width;
+    float workspace_menu_width;
+    float new_tab_width;
+    float min_tab_width;
+    float max_tab_width;
+    float shortcut_width;
+    float shortcut_full_width;
+    float shortcut_compact_width;
+    float spacing_total;
+    float content_width;
+    float available_width;
+    float fixed_width;
+    float remaining_width;
+    float tab_width;
+    size_t tab_count;
+    size_t active_tab;
+    int row_columns;
+    int request_add_tab;
+    int request_close_tab;
+    int request_switch_tab;
+    int request_rename_active;
+    int request_move_left;
+    int request_move_right;
+    size_t i;
+
+    if (ctx == NULL || tabs == NULL || active_workspace == NULL || window_width <= 0) {
+        return;
+    }
+
+    fission_nk_panel_workspace_tabs_ensure_main(tabs, active_workspace);
+
+    window_id = "__fission_panel_tabs_menu_bar";
+    shortcut_full_label = "";
+    shortcut_compact_label = "";
+    window_menu_label = "Window";
+    panels_menu_label = "Panels";
+    workspace_menu_label = "Workspace";
+    new_tab_button_label = "+ Tab";
+    new_tab_menu_item_label = "New Tab";
+    close_active_tab_menu_item_label = "Close Active Tab";
+    move_left_button_label = "Move Left";
+    move_right_button_label = "Move Right";
+    rename_apply_button_label = "Apply Name";
+    rename_field_prefix_label = "Rename:";
+    switch_section_label = "Switch To";
+    reset_button_label = "Reset Layout";
+    bar_height = 34.0f;
+    window_menu_width = 90.0f;
+    panels_menu_width = 90.0f;
+    workspace_menu_width = 110.0f;
+    new_tab_width = 72.0f;
+    min_tab_width = 64.0f;
+    max_tab_width = 180.0f;
+
+    if (config != NULL) {
+        window_id = fission_nk_panel_menu_label_or_default(config->window_id, window_id);
+        shortcut_full_label = fission_nk_panel_menu_label_or_default(
+            config->shortcut_label,
+            shortcut_full_label
+        );
+        shortcut_compact_label = fission_nk_panel_menu_label_or_default(
+            config->shortcut_compact_label,
+            shortcut_compact_label
+        );
+        window_menu_label = fission_nk_panel_menu_label_or_default(
+            config->window_menu_label,
+            window_menu_label
+        );
+        panels_menu_label = fission_nk_panel_menu_label_or_default(
+            config->panels_menu_label,
+            panels_menu_label
+        );
+        workspace_menu_label = fission_nk_panel_menu_label_or_default(
+            config->workspace_menu_label,
+            workspace_menu_label
+        );
+        new_tab_button_label = fission_nk_panel_menu_label_or_default(
+            config->new_tab_button_label,
+            new_tab_button_label
+        );
+        new_tab_menu_item_label = fission_nk_panel_menu_label_or_default(
+            config->new_tab_menu_item_label,
+            new_tab_menu_item_label
+        );
+        close_active_tab_menu_item_label = fission_nk_panel_menu_label_or_default(
+            config->close_active_tab_menu_item_label,
+            close_active_tab_menu_item_label
+        );
+        move_left_button_label = fission_nk_panel_menu_label_or_default(
+            config->move_left_button_label,
+            move_left_button_label
+        );
+        move_right_button_label = fission_nk_panel_menu_label_or_default(
+            config->move_right_button_label,
+            move_right_button_label
+        );
+        rename_apply_button_label = fission_nk_panel_menu_label_or_default(
+            config->rename_apply_button_label,
+            rename_apply_button_label
+        );
+        rename_field_prefix_label = fission_nk_panel_menu_label_or_default(
+            config->rename_field_prefix_label,
+            rename_field_prefix_label
+        );
+        switch_section_label = fission_nk_panel_menu_label_or_default(
+            config->switch_section_label,
+            switch_section_label
+        );
+        reset_button_label = fission_nk_panel_menu_label_or_default(
+            config->reset_button_label,
+            reset_button_label
+        );
+        bar_height = fission_nk_panel_menu_dim_or_default(config->height, bar_height);
+        window_menu_width = fission_nk_panel_menu_dim_or_default(
+            config->window_menu_width,
+            window_menu_width
+        );
+        panels_menu_width = fission_nk_panel_menu_dim_or_default(
+            config->panels_menu_width,
+            panels_menu_width
+        );
+        workspace_menu_width = fission_nk_panel_menu_dim_or_default(
+            config->workspace_menu_width,
+            workspace_menu_width
+        );
+        new_tab_width = fission_nk_panel_menu_dim_or_default(
+            config->new_tab_width,
+            new_tab_width
+        );
+        min_tab_width = fission_nk_panel_menu_dim_or_default(
+            config->min_tab_width,
+            min_tab_width
+        );
+        max_tab_width = fission_nk_panel_menu_dim_or_default(
+            config->max_tab_width,
+            max_tab_width
+        );
+    }
+
+    tab_count = tabs->tab_count;
+    if (tab_count == 0u) {
+        return;
+    }
+    active_tab = fission_nk_panel_workspace_tabs_active_index(tabs);
+    if (active_tab >= tab_count) {
+        active_tab = 0u;
+    }
+
+    if (tabs->rename_source_index != active_tab) {
+        const char *active_name;
+
+        active_name = fission_nk_panel_workspace_tabs_name_at(tabs, active_tab);
+        if (active_name == NULL || active_name[0] == '\0') {
+            active_name = "Workspace";
+        }
+        (void)snprintf(
+            tabs->rename_buffer,
+            sizeof(tabs->rename_buffer),
+            "%s",
+            active_name
+        );
+        tabs->rename_source_index = active_tab;
+    }
+
+    shortcut_full_width = 0.0f;
+    shortcut_compact_width = 0.0f;
+    if (
+        ctx->style.font != NULL &&
+        ctx->style.font->width != NULL &&
+        shortcut_full_label[0] != '\0'
+    ) {
+        shortcut_full_width = ctx->style.font->width(
+            ctx->style.font->userdata,
+            ctx->style.font->height,
+            shortcut_full_label,
+            (int)strlen(shortcut_full_label)
+        );
+    }
+    if (
+        ctx->style.font != NULL &&
+        ctx->style.font->width != NULL &&
+        shortcut_compact_label[0] != '\0'
+    ) {
+        shortcut_compact_width = ctx->style.font->width(
+            ctx->style.font->userdata,
+            ctx->style.font->height,
+            shortcut_compact_label,
+            (int)strlen(shortcut_compact_label)
+        );
+    }
+
+    row_columns = 6 + (int)tab_count;
+    spacing_total = ctx->style.window.spacing.x * (float)(row_columns - 1);
+
+    bounds = nk_rect(0.0f, 0.0f, (float)window_width, bar_height);
+    flags = NK_WINDOW_BORDER | NK_WINDOW_NO_SCROLLBAR | NK_WINDOW_BACKGROUND;
+    if (!nk_begin(ctx, window_id, bounds, flags)) {
+        nk_end(ctx);
+        return;
+    }
+
+    content_width = nk_window_get_content_region_size(ctx).x;
+    if (content_width <= 0.0f) {
+        content_width = (float)window_width;
+    }
+    available_width = content_width - spacing_total;
+    if (available_width < 0.0f) {
+        available_width = 0.0f;
+    }
+
+    fixed_width = (
+        window_menu_width +
+        panels_menu_width +
+        workspace_menu_width +
+        new_tab_width
+    );
+    remaining_width = available_width - fixed_width;
+    if (remaining_width < 0.0f) {
+        remaining_width = 0.0f;
+    }
+
+    tab_width = 0.0f;
+    if (tab_count > 0u) {
+        shortcut_width = shortcut_full_width + 22.0f;
+        if (remaining_width <= (float)tab_count * min_tab_width) {
+            shortcut_width = 0.0f;
+            tab_width = remaining_width / (float)tab_count;
+        } else {
+            float max_shortcut_width;
+
+            max_shortcut_width = remaining_width - (float)tab_count * min_tab_width;
+            if (shortcut_width > max_shortcut_width) {
+                shortcut_width = max_shortcut_width;
+            }
+            if (shortcut_width < 0.0f) {
+                shortcut_width = 0.0f;
+            }
+            tab_width = (remaining_width - shortcut_width) / (float)tab_count;
+        }
+    } else {
+        shortcut_width = remaining_width;
+    }
+
+    if (tab_width > max_tab_width) {
+        float overflow;
+
+        overflow = (tab_width - max_tab_width) * (float)tab_count;
+        tab_width = max_tab_width;
+        shortcut_width += overflow;
+    }
+    if (shortcut_width < 0.0f) {
+        shortcut_width = 0.0f;
+    }
+
+    if (shortcut_width > 0.0f) {
+        if (shortcut_width >= shortcut_full_width + 8.0f) {
+            shortcut_label = shortcut_full_label;
+        } else if (shortcut_width >= shortcut_compact_width + 8.0f) {
+            shortcut_label = shortcut_compact_label;
+        } else {
+            shortcut_label = "";
+        }
+    } else {
+        shortcut_label = "";
+    }
+
+    request_add_tab = 0;
+    request_close_tab = 0;
+    request_switch_tab = -1;
+    request_rename_active = 0;
+    request_move_left = 0;
+    request_move_right = 0;
+
+    nk_menubar_begin(ctx);
+    nk_layout_row_begin(ctx, NK_STATIC, 24.0f, row_columns);
+
+    nk_layout_row_push(ctx, window_menu_width);
+    fission_nk_panel_workspace_draw_window_menu(
+        ctx,
+        active_workspace,
+        window_menu_label,
+        300.0f,
+        340.0f,
+        reset_button_label,
+        reset_layout,
+        reset_layout_user_data
+    );
+
+    nk_layout_row_push(ctx, panels_menu_width);
+    fission_nk_panel_workspace_draw_panels_menu(
+        ctx,
+        active_workspace,
+        panels_menu_label,
+        340.0f,
+        360.0f
+    );
+
+    nk_layout_row_push(ctx, workspace_menu_width);
+    if (
+        nk_menu_begin_label(
+            ctx,
+            workspace_menu_label,
+            NK_TEXT_LEFT,
+            nk_vec2(340.0f, 360.0f)
+        )
+    ) {
+        const char *active_name;
+
+        active_name = fission_nk_panel_workspace_tabs_name_at(tabs, active_tab);
+        if (active_name == NULL || active_name[0] == '\0') {
+            active_name = "Workspace";
+        }
+
+        nk_layout_row_dynamic(ctx, 24.0f, 1);
+        if (nk_menu_item_label(ctx, new_tab_menu_item_label, NK_TEXT_LEFT)) {
+            request_add_tab = 1;
+        }
+
+        nk_layout_row_dynamic(ctx, 24.0f, 2);
+        if (nk_button_label(ctx, move_left_button_label)) {
+            request_move_left = 1;
+        }
+        if (nk_button_label(ctx, move_right_button_label)) {
+            request_move_right = 1;
+        }
+
+        if (tab_count > 1u) {
+            nk_layout_row_dynamic(ctx, 24.0f, 1);
+            if (
+                nk_menu_item_label(
+                    ctx,
+                    close_active_tab_menu_item_label,
+                    NK_TEXT_LEFT
+                )
+            ) {
+                request_close_tab = 1;
+            }
+        }
+
+        nk_layout_row_dynamic(ctx, 8.0f, 1);
+        nk_spacing(ctx, 1);
+
+        nk_layout_row_dynamic(ctx, 18.0f, 1);
+        nk_labelf(
+            ctx,
+            NK_TEXT_LEFT,
+            "%s %s",
+            rename_field_prefix_label,
+            active_name
+        );
+        nk_layout_row_dynamic(ctx, 26.0f, 1);
+        (void)nk_edit_string_zero_terminated(
+            ctx,
+            NK_EDIT_FIELD,
+            tabs->rename_buffer,
+            sizeof(tabs->rename_buffer),
+            nk_filter_default
+        );
+        nk_layout_row_dynamic(ctx, 24.0f, 1);
+        if (nk_button_label(ctx, rename_apply_button_label)) {
+            request_rename_active = 1;
+        }
+
+        nk_layout_row_dynamic(ctx, 8.0f, 1);
+        nk_spacing(ctx, 1);
+        nk_layout_row_dynamic(ctx, 18.0f, 1);
+        nk_label(ctx, switch_section_label, NK_TEXT_LEFT);
+
+        for (i = 0u; i < tab_count; ++i) {
+            char label[96];
+            const char *tab_name;
+
+            tab_name = fission_nk_panel_workspace_tabs_name_at(tabs, i);
+            if (tab_name == NULL || tab_name[0] == '\0') {
+                tab_name = "Workspace";
+            }
+            (void)snprintf(
+                label,
+                sizeof(label),
+                "%s%s",
+                (i == active_tab) ? "[*] " : "",
+                tab_name
+            );
+            nk_layout_row_dynamic(ctx, 22.0f, 1);
+            if (nk_menu_item_label(ctx, label, NK_TEXT_LEFT)) {
+                request_switch_tab = (int)i;
+            }
+        }
+
+        nk_menu_end(ctx);
+    }
+
+    nk_layout_row_push(ctx, new_tab_width);
+    if (nk_button_label(ctx, new_tab_button_label)) {
+        request_add_tab = 1;
+    }
+
+    for (i = 0u; i < tab_count; ++i) {
+        char tab_label[96];
+        const char *tab_name;
+
+        tab_name = fission_nk_panel_workspace_tabs_name_at(tabs, i);
+        if (tab_name == NULL || tab_name[0] == '\0') {
+            tab_name = "Workspace";
+        }
+        (void)snprintf(
+            tab_label,
+            sizeof(tab_label),
+            "%s%s",
+            (i == active_tab) ? "[*] " : "",
+            tab_name
+        );
+        nk_layout_row_push(ctx, tab_width);
+        if (nk_button_label(ctx, tab_label)) {
+            request_switch_tab = (int)i;
+        }
+    }
+
+    nk_layout_row_push(ctx, shortcut_width);
+    nk_label(ctx, shortcut_label, NK_TEXT_RIGHT);
+
+    nk_layout_row_end(ctx);
+    nk_menubar_end(ctx);
+    nk_end(ctx);
+
+    if (request_add_tab != 0) {
+        (void)fission_nk_panel_workspace_tabs_create(tabs, active_workspace, NULL, NULL);
+    }
+
+    tab_count = fission_nk_panel_workspace_tabs_count(tabs);
+    if (request_switch_tab >= 0 && (size_t)request_switch_tab < tab_count) {
+        (void)fission_nk_panel_workspace_tabs_set_active(
+            tabs,
+            active_workspace,
+            (size_t)request_switch_tab
+        );
+    }
+
+    tab_count = fission_nk_panel_workspace_tabs_count(tabs);
+    active_tab = fission_nk_panel_workspace_tabs_active_index(tabs);
+    if (request_move_left != 0 && active_tab > 0u) {
+        (void)fission_nk_panel_workspace_tabs_move(
+            tabs,
+            active_workspace,
+            active_tab,
+            active_tab - 1u
+        );
+    } else if (request_move_right != 0 && active_tab + 1u < tab_count) {
+        (void)fission_nk_panel_workspace_tabs_move(
+            tabs,
+            active_workspace,
+            active_tab,
+            active_tab + 1u
+        );
+    }
+
+    active_tab = fission_nk_panel_workspace_tabs_active_index(tabs);
+    if (request_rename_active != 0 && tabs->rename_buffer[0] != '\0') {
+        (void)fission_nk_panel_workspace_tabs_rename(
+            tabs,
+            active_tab,
+            tabs->rename_buffer
+        );
+    }
+
+    tab_count = fission_nk_panel_workspace_tabs_count(tabs);
+    active_tab = fission_nk_panel_workspace_tabs_active_index(tabs);
+    if (request_close_tab != 0 && tab_count > 1u && active_tab < tab_count) {
+        (void)fission_nk_panel_workspace_tabs_remove(tabs, active_workspace, active_tab);
+    }
+}

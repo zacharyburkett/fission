@@ -12,8 +12,11 @@ struct nk_context;
 #define FISSION_NK_PANEL_HEADER_BUTTON_MARGIN 6.0f
 #define FISSION_NK_PANEL_WINDOW_NO_SCROLL_FOCUS (1u << 30)
 #define FISSION_NK_PANEL_SLOT_COUNT 9
+#define FISSION_NK_MAX_WORKSPACE_TABS 12
+#define FISSION_NK_WORKSPACE_TAB_NAME_MAX 48
 
 typedef struct fission_nk_panel_workspace fission_nk_panel_workspace_t;
+typedef struct fission_nk_panel_workspace_tabs fission_nk_panel_workspace_tabs_t;
 
 typedef enum fission_nk_panel_status {
     FISSION_NK_PANEL_STATUS_OK = 0,
@@ -108,6 +111,16 @@ struct fission_nk_panel_workspace {
     fission_nk_panel_bounds_t splitter_right_bounds;
     fission_nk_panel_bounds_t splitter_top_bounds;
     fission_nk_panel_bounds_t splitter_bottom_bounds;
+};
+
+struct fission_nk_panel_workspace_tabs {
+    fission_nk_panel_workspace_t tabs[FISSION_NK_MAX_WORKSPACE_TABS];
+    char tab_names[FISSION_NK_MAX_WORKSPACE_TABS][FISSION_NK_WORKSPACE_TAB_NAME_MAX];
+    size_t tab_count;
+    size_t active_tab_index;
+    unsigned int next_tab_ordinal;
+    size_t rename_source_index;
+    char rename_buffer[FISSION_NK_WORKSPACE_TAB_NAME_MAX];
 };
 
 void fission_nk_panel_workspace_init(fission_nk_panel_workspace_t *workspace);
@@ -266,6 +279,105 @@ void fission_nk_panel_workspace_draw_menu_bar(
     fission_nk_panel_workspace_t *workspace,
     int window_width,
     const fission_nk_panel_menu_bar_config_t *config,
+    fission_nk_panel_workspace_reset_layout_fn reset_layout,
+    void *reset_layout_user_data
+);
+
+void fission_nk_panel_workspace_tabs_init(
+    fission_nk_panel_workspace_tabs_t *tabs
+);
+void fission_nk_panel_workspace_tabs_shutdown(
+    fission_nk_panel_workspace_tabs_t *tabs
+);
+void fission_nk_panel_workspace_tabs_commit_active(
+    fission_nk_panel_workspace_tabs_t *tabs,
+    const fission_nk_panel_workspace_t *active_workspace
+);
+void fission_nk_panel_workspace_tabs_load_active(
+    const fission_nk_panel_workspace_tabs_t *tabs,
+    fission_nk_panel_workspace_t *active_workspace
+);
+fission_nk_panel_status_t fission_nk_panel_workspace_tabs_register_panel(
+    fission_nk_panel_workspace_tabs_t *tabs,
+    fission_nk_panel_workspace_t *active_workspace,
+    const fission_nk_panel_desc_t *panel
+);
+void fission_nk_panel_workspace_tabs_draw_all(
+    fission_nk_panel_workspace_tabs_t *tabs,
+    fission_nk_panel_workspace_t *active_workspace,
+    struct nk_context *ctx,
+    int window_width,
+    int window_height
+);
+size_t fission_nk_panel_workspace_tabs_count(
+    const fission_nk_panel_workspace_tabs_t *tabs
+);
+size_t fission_nk_panel_workspace_tabs_active_index(
+    const fission_nk_panel_workspace_tabs_t *tabs
+);
+const char *fission_nk_panel_workspace_tabs_name_at(
+    const fission_nk_panel_workspace_tabs_t *tabs,
+    size_t index
+);
+fission_nk_panel_status_t fission_nk_panel_workspace_tabs_set_active(
+    fission_nk_panel_workspace_tabs_t *tabs,
+    fission_nk_panel_workspace_t *active_workspace,
+    size_t index
+);
+fission_nk_panel_status_t fission_nk_panel_workspace_tabs_create(
+    fission_nk_panel_workspace_tabs_t *tabs,
+    fission_nk_panel_workspace_t *active_workspace,
+    const char *name,
+    size_t *out_index
+);
+fission_nk_panel_status_t fission_nk_panel_workspace_tabs_remove(
+    fission_nk_panel_workspace_tabs_t *tabs,
+    fission_nk_panel_workspace_t *active_workspace,
+    size_t index
+);
+fission_nk_panel_status_t fission_nk_panel_workspace_tabs_rename(
+    fission_nk_panel_workspace_tabs_t *tabs,
+    size_t index,
+    const char *name
+);
+fission_nk_panel_status_t fission_nk_panel_workspace_tabs_move(
+    fission_nk_panel_workspace_tabs_t *tabs,
+    fission_nk_panel_workspace_t *active_workspace,
+    size_t from_index,
+    size_t to_index
+);
+
+typedef struct fission_nk_panel_workspace_tabs_menu_bar_config {
+    const char *window_id;
+    const char *shortcut_label;
+    const char *shortcut_compact_label;
+    const char *window_menu_label;
+    const char *panels_menu_label;
+    const char *workspace_menu_label;
+    const char *new_tab_button_label;
+    const char *new_tab_menu_item_label;
+    const char *close_active_tab_menu_item_label;
+    const char *move_left_button_label;
+    const char *move_right_button_label;
+    const char *rename_apply_button_label;
+    const char *rename_field_prefix_label;
+    const char *switch_section_label;
+    const char *reset_button_label;
+    float height;
+    float window_menu_width;
+    float panels_menu_width;
+    float workspace_menu_width;
+    float new_tab_width;
+    float min_tab_width;
+    float max_tab_width;
+} fission_nk_panel_workspace_tabs_menu_bar_config_t;
+
+void fission_nk_panel_workspace_tabs_draw_menu_bar(
+    struct nk_context *ctx,
+    fission_nk_panel_workspace_tabs_t *tabs,
+    fission_nk_panel_workspace_t *active_workspace,
+    int window_width,
+    const fission_nk_panel_workspace_tabs_menu_bar_config_t *config,
     fission_nk_panel_workspace_reset_layout_fn reset_layout,
     void *reset_layout_user_data
 );
