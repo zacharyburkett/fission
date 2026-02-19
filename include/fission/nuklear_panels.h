@@ -14,6 +14,7 @@ struct nk_context;
 #define FISSION_NK_PANEL_SLOT_COUNT 9
 #define FISSION_NK_MAX_WORKSPACE_TABS 12
 #define FISSION_NK_WORKSPACE_TAB_NAME_MAX 48
+#define FISSION_NK_PANEL_UI_SCROLL_BLOCK_MAX 16
 
 typedef struct fission_nk_panel_workspace fission_nk_panel_workspace_t;
 typedef struct fission_nk_panel_workspace_tabs fission_nk_panel_workspace_tabs_t;
@@ -111,6 +112,9 @@ struct fission_nk_panel_workspace {
     fission_nk_panel_bounds_t splitter_right_bounds;
     fission_nk_panel_bounds_t splitter_top_bounds;
     fission_nk_panel_bounds_t splitter_bottom_bounds;
+    fission_nk_panel_bounds_t ui_scroll_blocks[FISSION_NK_PANEL_UI_SCROLL_BLOCK_MAX];
+    size_t ui_scroll_block_count;
+    int ui_popup_open;
 };
 
 struct fission_nk_panel_workspace_tabs {

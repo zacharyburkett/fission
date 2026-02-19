@@ -118,6 +118,32 @@ static void fission_nk_panel_overlay_style_end(
     }
 }
 
+static void fission_nk_panel_focus_root_window_on_scroll(struct nk_context *ctx)
+{
+    struct nk_window *root;
+
+    if (ctx == NULL || ctx->current == NULL) {
+        return;
+    }
+    if (
+        ctx->input.mouse.scroll_delta.x == 0.0f &&
+        ctx->input.mouse.scroll_delta.y == 0.0f
+    ) {
+        return;
+    }
+    if (nk_input_is_mouse_down(&ctx->input, NK_BUTTON_LEFT)) {
+        return;
+    }
+
+    root = ctx->current;
+    while (root->parent != NULL) {
+        root = root->parent;
+    }
+
+    ctx->active = root;
+    root->flags &= ~(nk_flags)NK_WINDOW_ROM;
+}
+
 static int fission_nk_panel_slot_is_valid(fission_nk_panel_slot_t slot)
 {
     return (
@@ -2317,6 +2343,136 @@ static size_t fission_nk_panel_host_resolve_hovered_panel_index(
     return host->count;
 }
 
+static int fission_nk_panel_host_window_name_is_panel(
+    const fission_nk_panel_workspace_t *host,
+    const char *window_name
+)
+{
+    size_t i;
+
+    if (host == NULL || window_name == NULL) {
+        return 0;
+    }
+
+    for (i = 0u; i < host->count; ++i) {
+        if (host->entries[i].state.visible == 0) {
+            continue;
+        }
+        if (strcmp(window_name, host->entries[i].desc.id) == 0) {
+            return 1;
+        }
+    }
+
+    return 0;
+}
+
+static void fission_nk_panel_host_clear_ui_scroll_blocks(
+    fission_nk_panel_workspace_t *host
+)
+{
+    if (host == NULL) {
+        return;
+    }
+
+    host->ui_scroll_block_count = 0u;
+    host->ui_popup_open = 0;
+    memset(host->ui_scroll_blocks, 0, sizeof(host->ui_scroll_blocks));
+}
+
+static void fission_nk_panel_host_add_ui_scroll_block(
+    fission_nk_panel_workspace_t *host,
+    const struct nk_rect *rect
+)
+{
+    fission_nk_panel_bounds_t *block;
+
+    if (host == NULL || rect == NULL) {
+        return;
+    }
+    if (rect->w <= 0.0f || rect->h <= 0.0f) {
+        return;
+    }
+    if (host->ui_scroll_block_count >= FISSION_NK_PANEL_UI_SCROLL_BLOCK_MAX) {
+        return;
+    }
+
+    block = &host->ui_scroll_blocks[host->ui_scroll_block_count];
+    block->x = rect->x;
+    block->y = rect->y;
+    block->w = rect->w;
+    block->h = rect->h;
+    host->ui_scroll_block_count += 1u;
+}
+
+static int fission_nk_panel_host_mouse_over_ui_scroll_blocks(
+    const fission_nk_panel_workspace_t *host,
+    const struct nk_context *ctx
+)
+{
+    size_t i;
+
+    if (host == NULL || ctx == NULL || host->ui_scroll_block_count == 0u) {
+        return 0;
+    }
+
+    for (i = 0u; i < host->ui_scroll_block_count; ++i) {
+        struct nk_rect block_rect;
+
+        block_rect = fission_nk_panel_bounds_to_nk_rect(&host->ui_scroll_blocks[i]);
+        if (nk_input_is_mouse_hovering_rect(&ctx->input, block_rect) != 0) {
+            return 1;
+        }
+    }
+
+    return 0;
+}
+
+static int fission_nk_panel_host_mouse_over_non_panel_ui(
+    const fission_nk_panel_workspace_t *host,
+    const struct nk_context *ctx
+)
+{
+    const struct nk_window *iter;
+
+    if (host == NULL || ctx == NULL) {
+        return 0;
+    }
+
+    iter = ctx->begin;
+    while (iter != NULL) {
+        struct nk_rect iter_bounds;
+
+        if ((iter->flags & NK_WINDOW_HIDDEN) != 0 || (iter->flags & NK_WINDOW_NO_INPUT) != 0) {
+            iter = iter->next;
+            continue;
+        }
+
+        if (iter->popup.active && iter->popup.win != NULL) {
+            if (
+                nk_input_is_mouse_hovering_rect(&ctx->input, iter->popup.win->bounds) != 0 &&
+                fission_nk_panel_host_window_name_is_panel(
+                    host,
+                    iter->popup.win->name_string
+                ) == 0
+            ) {
+                return 1;
+            }
+        }
+
+        iter_bounds = fission_nk_panel_window_hover_bounds(ctx, iter);
+        if (
+            nk_input_is_mouse_hovering_rect(&ctx->input, iter_bounds) != 0 &&
+            fission_nk_panel_host_window_name_is_panel(host, iter->name_string) == 0
+        ) {
+            return 1;
+        }
+
+        iter = iter->next;
+    }
+
+    return 0;
+}
+
 static size_t fission_nk_panel_host_find_scroll_target(
     const fission_nk_panel_workspace_t *host,
     const struct nk_context *ctx,
@@ -2639,6 +2795,7 @@ void fission_nk_panel_workspace_draw_all(
     float original_scroll_y;
     size_t scroll_target_index;
     int scroll_routing_enabled;
+    int suppress_panel_scroll;
 
     if (host == NULL || ctx == NULL || window_width <= 0 || window_height <= 0) {
         return;
@@ -2658,11 +2815,25 @@ void fission_nk_panel_workspace_draw_all(
 
     original_scroll_x = ctx->input.mouse.scroll_delta.x;
     original_scroll_y = ctx->input.mouse.scroll_delta.y;
-    scroll_target_index = fission_nk_panel_host_activate_hovered_panel_on_scroll(host, ctx);
-    scroll_routing_enabled = (
-        (original_scroll_x != 0.0f || original_scroll_y != 0.0f) &&
-        scroll_target_index < host->count
-    );
+    suppress_panel_scroll = fission_nk_panel_host_mouse_over_ui_scroll_blocks(host, ctx);
+    if (suppress_panel_scroll == 0 && host->ui_popup_open != 0) {
+        suppress_panel_scroll = 1;
+    }
+    if (suppress_panel_scroll == 0) {
+        suppress_panel_scroll = fission_nk_panel_host_mouse_over_non_panel_ui(host, ctx);
+    }
+    scroll_target_index = host->count;
+    scroll_routing_enabled = 0;
+    if (suppress_panel_scroll != 0) {
+        ctx->input.mouse.scroll_delta.x = 0.0f;
+        ctx->input.mouse.scroll_delta.y = 0.0f;
+    } else {
+        scroll_target_index = fission_nk_panel_host_activate_hovered_panel_on_scroll(host, ctx);
+        scroll_routing_enabled = (
+            (original_scroll_x != 0.0f || original_scroll_y != 0.0f) &&
+            scroll_target_index < host->count
+        );
+    }
 
     for (i = 0u; i < host->count; ++i) {
         visible_snapshot[i] = host->entries[i].state.visible;
@@ -2731,6 +2902,9 @@ void fission_nk_panel_workspace_draw_all(
     if (scroll_routing_enabled != 0) {
         ctx->input.mouse.scroll_delta.x = 0.0f;
         ctx->input.mouse.scroll_delta.y = 0.0f;
+    } else if (suppress_panel_scroll != 0) {
+        ctx->input.mouse.scroll_delta.x = original_scroll_x;
+        ctx->input.mouse.scroll_delta.y = original_scroll_y;
     }
 
     fission_nk_panel_host_draw_splitter_overlays(host, ctx);
@@ -3186,6 +3360,14 @@ void fission_nk_panel_workspace_draw_window_menu(
     ) {
         return;
     }
+    {
+        struct nk_rect popup_bounds;
+
+        popup_bounds = nk_window_get_bounds(ctx);
+        host->ui_popup_open = 1;
+        fission_nk_panel_host_add_ui_scroll_block(host, &popup_bounds);
+    }
+    fission_nk_panel_focus_root_window_on_scroll(ctx);
 
     fission_nk_panel_workspace_get_column_ratios(host, &left_ratio, &right_ratio);
     fission_nk_panel_workspace_get_row_ratios(host, &top_ratio, &bottom_ratio);
@@ -3232,6 +3414,9 @@ void fission_nk_panel_workspace_draw_panels_menu(
     int visible_count;
     int total_count;
     const char *resolved_menu_label;
+    float max_menu_height;
+    float list_height;
+    char list_group_id[96];
 
     if (ctx == NULL || host == NULL) {
         return;
@@ -3240,6 +3425,13 @@ void fission_nk_panel_workspace_draw_panels_menu(
     resolved_menu_label = fission_nk_panel_menu_label_or_default(menu_label, "Panels");
     menu_width = fission_nk_panel_menu_dim_or_default(menu_width, 340.0f);
     menu_height = fission_nk_panel_menu_dim_or_default(menu_height, 360.0f);
+    max_menu_height = (float)host->last_window_height - 64.0f;
+    if (max_menu_height > 140.0f && menu_height > max_menu_height) {
+        menu_height = max_menu_height;
+    }
+    if (menu_height < 140.0f) {
+        menu_height = 140.0f;
+    }
 
     if (
         !nk_menu_begin_label(
@@ -3251,6 +3443,14 @@ void fission_nk_panel_workspace_draw_panels_menu(
     ) {
         return;
     }
+    {
+        struct nk_rect popup_bounds;
+
+        popup_bounds = nk_window_get_bounds(ctx);
+        host->ui_popup_open = 1;
+        fission_nk_panel_host_add_ui_scroll_block(host, &popup_bounds);
+    }
+    fission_nk_panel_focus_root_window_on_scroll(ctx);
 
     visible_count = 0;
     total_count = (int)fission_nk_panel_workspace_count(host);
@@ -3276,36 +3476,49 @@ void fission_nk_panel_workspace_draw_panels_menu(
     nk_layout_row_dynamic(ctx, 8.0f, 1);
     nk_spacing(ctx, 1);
 
-    for (i = 0u; i < host->count; ++i) {
-        const char *title;
-        char label[320];
-        int visible;
-        int detached;
+    list_height = menu_height - 110.0f;
+    if (list_height < 40.0f) {
+        list_height = 40.0f;
+    }
+    (void)snprintf(list_group_id, sizeof(list_group_id), "__fission_panels_menu_list_%p", (void *)host);
 
-        title = fission_nk_panel_workspace_panel_title_at(host, i);
-        if (title == NULL) {
-            continue;
-        }
+    nk_layout_row_dynamic(ctx, list_height, 1);
+    if (nk_group_begin(ctx, list_group_id, NK_WINDOW_BORDER) != 0) {
+        fission_nk_panel_focus_root_window_on_scroll(ctx);
+        for (i = 0u; i < host->count; ++i) {
+            const char *title;
+            char label[320];
+            int visible;
+            int detached;
+            nk_bool selected;
 
-        visible = fission_nk_panel_workspace_panel_is_visible_at(host, i);
-        detached = fission_nk_panel_workspace_panel_is_detached_at(host, i);
+            title = fission_nk_panel_workspace_panel_title_at(host, i);
+            if (title == NULL) {
+                continue;
+            }
 
-        (void)snprintf(
-            label,
-            sizeof(label),
-            "%s %s%s",
-            (visible != 0) ? "[x]" : "[ ]",
-            title,
-            (detached != 0) ? " (floating)" : ""
-        );
-        nk_layout_row_dynamic(ctx, 24.0f, 1);
-        if (nk_menu_item_label(ctx, label, NK_TEXT_LEFT)) {
-            (void)fission_nk_panel_workspace_set_panel_visible_at(
-                host,
-                i,
-                (visible == 0) ? 1 : 0
+            visible = fission_nk_panel_workspace_panel_is_visible_at(host, i);
+            detached = fission_nk_panel_workspace_panel_is_detached_at(host, i);
+
+            (void)snprintf(
+                label,
+                sizeof(label),
+                "%s %s%s",
+                (visible != 0) ? "[x]" : "[ ]",
+                title,
+                (detached != 0) ? " (floating)" : ""
             );
+            selected = (visible != 0) ? nk_true : nk_false;
+            nk_layout_row_dynamic(ctx, 24.0f, 1);
+            if (nk_selectable_label(ctx, label, NK_TEXT_LEFT, &selected) != 0) {
+                (void)fission_nk_panel_workspace_set_panel_visible_at(
+                    host,
+                    i,
+                    (visible == 0) ? 1 : 0
+                );
+            }
         }
+        nk_group_end(ctx);
     }
 
     nk_menu_end(ctx);
@@ -3421,6 +3634,8 @@ void fission_nk_panel_workspace_draw_menu_bar(
     }
 
     bounds = nk_rect(0.0f, 0.0f, (float)window_width, bar_height);
+    fission_nk_panel_host_clear_ui_scroll_blocks(host);
+    fission_nk_panel_host_add_ui_scroll_block(host, &bounds);
     flags = NK_WINDOW_BORDER | NK_WINDOW_NO_SCROLLBAR | NK_WINDOW_BACKGROUND;
     if (!nk_begin(ctx, window_id, bounds, flags)) {
         nk_end(ctx);
@@ -4112,6 +4327,8 @@ void fission_nk_panel_workspace_tabs_draw_menu_bar(
     spacing_total = ctx->style.window.spacing.x * (float)(row_columns - 1);
 
     bounds = nk_rect(0.0f, 0.0f, (float)window_width, bar_height);
+    fission_nk_panel_host_clear_ui_scroll_blocks(active_workspace);
+    fission_nk_panel_host_add_ui_scroll_block(active_workspace, &bounds);
     flags = NK_WINDOW_BORDER | NK_WINDOW_NO_SCROLLBAR | NK_WINDOW_BACKGROUND;
     if (!nk_begin(ctx, window_id, bounds, flags)) {
         nk_end(ctx);
@@ -4224,6 +4441,11 @@ void fission_nk_panel_workspace_tabs_draw_menu_bar(
         )
     ) {
         const char *active_name;
+        struct nk_rect popup_bounds;
+
+        popup_bounds = nk_window_get_bounds(ctx);
+        active_workspace->ui_popup_open = 1;
+        fission_nk_panel_host_add_ui_scroll_block(active_workspace, &popup_bounds);
 
         active_name = fission_nk_panel_workspace_tabs_name_at(tabs, active_tab);
         if (active_name == NULL || active_name[0] == '\0') {
