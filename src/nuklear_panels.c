@@ -3938,6 +3938,7 @@ fission_nk_panel_status_t fission_nk_panel_workspace_tabs_create(
 )
 {
     size_t new_index;
+    size_t i;
 
     if (tabs == NULL || active_workspace == NULL) {
         return FISSION_NK_PANEL_STATUS_INVALID_ARGUMENT;
@@ -3954,6 +3955,13 @@ fission_nk_panel_status_t fission_nk_panel_workspace_tabs_create(
     fission_nk_panel_workspace_tabs_commit_active(tabs, active_workspace);
     new_index = tabs->tab_count;
     tabs->tabs[new_index] = *active_workspace;
+    for (i = 0u; i < tabs->tabs[new_index].count; ++i) {
+        tabs->tabs[new_index].entries[i].state.visible = 0;
+        tabs->tabs[new_index].entries[i].state.detached = 0;
+    }
+    tabs->tabs[new_index].ui_scroll_block_count = 0u;
+    tabs->tabs[new_index].ui_popup_open = 0;
+    memset(tabs->tabs[new_index].ui_scroll_blocks, 0, sizeof(tabs->tabs[new_index].ui_scroll_blocks));
     if (name != NULL && name[0] != '\0') {
         fission_nk_panel_workspace_tabs_copy_name(
             tabs->tab_names[new_index],
